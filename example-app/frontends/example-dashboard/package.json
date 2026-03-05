@@ -1,0 +1,12 @@
+{
+  "name": "@example-app/dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev:build": "vite build --watch --mode development",
+    "build": "vite build"
+  },
+  "devDependencies": {
+    "vite": "^7.3.1"
+  }
+}

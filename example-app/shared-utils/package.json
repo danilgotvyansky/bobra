@@ -1,0 +1,27 @@
+{
+  "name": "@example-app/shared-utils",
+  "version": "0.1.0",
+  "description": "Shared utilities for example app workers",
+  "main": "src/index.ts",
+  "scripts": {
+    "build": "tsc",
+    "migrate": "ts-node src/db/migrate.ts",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@bobra/framework": "workspace:*",
+    "@cloudflare/workers-types": "^4.20240925.0",
+    "dotenv": "^16.4.1",
+    "drizzle-orm": "^0.44.3",
+    "drizzle-valibot": "^0.4.2",
+    "pg": "^8.16.3",
+    "postgres": "^3.2.0",
+    "ts-node": "^10.9.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.4",
+    "@types/pg": "^8.11.2",
+    "drizzle-kit": "^0.31.4",
+    "typescript": "^5.6.0"
+  }
+}

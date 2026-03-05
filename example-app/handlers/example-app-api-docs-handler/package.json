@@ -1,0 +1,21 @@
+{
+  "name": "@example-app/api-docs-handler",
+  "version": "0.1.0",
+  "description": "API Docs handler for example-app API documentation",
+  "main": "src/index.ts",
+  "scripts": {
+    "build": "tsc",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@bobra/framework": "workspace:*",
+    "@hono/swagger-ui": "^0.5.2",
+    "hono": "^4.11.9",
+    "@scalar/hono-api-reference": "^0.9.18",
+    "@scalar/openapi-to-markdown": "^0.2.37"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240925.0",
+    "typescript": "^5.6.0"
+  }
+}

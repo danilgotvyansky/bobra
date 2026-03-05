@@ -1,0 +1,19 @@
+{
+	"name": "@example-app/router-worker",
+	"version": "0.1.0",
+	"private": true,
+	"scripts": {
+		"type-check": "tsc --noEmit",
+		"build": "tsc"
+	},
+	"dependencies": {
+		"hono": "^4.11.9",
+		"js-yaml": "^4.1.0",
+		"@bobra/framework": "workspace:*"
+	},
+	"devDependencies": {
+		"@cloudflare/workers-types": "^4.20250407.0",
+		"@types/js-yaml": "^4.0.9",
+		"typescript": "^5.5.2"
+	}
+}
