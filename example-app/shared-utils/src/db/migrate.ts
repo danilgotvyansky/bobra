@@ -1,3 +1,3 @@
-import { runMigrations } from '@bobra/framework/db/migrate';
+import { runMigrations } from '@danylohotvianskyi/bobra-framework/db/migrate';
 
 runMigrations();

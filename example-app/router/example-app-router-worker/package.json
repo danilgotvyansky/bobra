@@ -9,7 +9,7 @@
 	"dependencies": {
 		"hono": "^4.11.9",
 		"js-yaml": "^4.1.0",
-		"@bobra/framework": "workspace:*"
+		"@danylohotvianskyi/bobra-framework": "catalog:"
 	},
 	"devDependencies": {
 		"@cloudflare/workers-types": "^4.20250407.0",

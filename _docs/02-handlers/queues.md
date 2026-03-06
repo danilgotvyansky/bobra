@@ -31,7 +31,7 @@ workers:
 In your handler file (e.g., `src/index.ts`), implement the `queue` and `handlesQueue` properties:
 
 ```typescript
-import { AppHandler } from '@bobra/framework';
+import { AppHandler } from '@danylohotvianskyi/bobra-framework';
 
 export const userProcessingHandler: AppHandler = {
   name: 'user-processing',

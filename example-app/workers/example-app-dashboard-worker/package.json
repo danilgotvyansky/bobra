@@ -7,7 +7,7 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@bobra/framework": "workspace:*"
+    "@danylohotvianskyi/bobra-framework": "catalog:"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240925.0",

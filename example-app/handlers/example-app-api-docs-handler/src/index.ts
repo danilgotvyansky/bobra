@@ -10,10 +10,10 @@ import { swaggerUI } from '@hono/swagger-ui';
 import {
   getLogger,
   initializeLogger
-} from '@bobra/framework/logging';
-import { serviceFetch } from '@bobra/framework/network';
-import type { AppHandler } from '@bobra/framework/core';
-import { mergeOpenApiSpecs } from '@bobra/framework/batteries/openapi';
+} from '@danylohotvianskyi/bobra-framework/logging';
+import { serviceFetch } from '@danylohotvianskyi/bobra-framework/network';
+import type { AppHandler } from '@danylohotvianskyi/bobra-framework/core';
+import { mergeOpenApiSpecs } from '@danylohotvianskyi/bobra-framework/batteries/openapi';
 import type { Env, ServiceDiscovery } from './types';
 import { Scalar } from '@scalar/hono-api-reference';
 import { createMarkdownFromOpenApi } from '@scalar/openapi-to-markdown'

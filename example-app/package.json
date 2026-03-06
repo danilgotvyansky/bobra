@@ -35,6 +35,7 @@
     "wrangler": "^4.63.0"
   },
   "dependencies": {
+    "@danylohotvianskyi/bobra-framework": "catalog:",
     "concurrently": "^9.2.0",
     "pnpm": "^10.15.1"
   }

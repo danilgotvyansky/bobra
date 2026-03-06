@@ -7,7 +7,7 @@ Bobra provides a structured logging system designed for Workers, ensuring that l
 The framework exports a standard logger that supports different log levels and automatic context attachment. Use `getLogger()` to obtain the logger instance.
 
 ```typescript
-import { getLogger } from '@bobra/framework';
+import { getLogger } from '@danylohotvianskyi/bobra-framework';
 
 const logger = getLogger();
 

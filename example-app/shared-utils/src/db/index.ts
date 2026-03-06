@@ -8,7 +8,7 @@ import {
   type DrizzlePgClient,
   hasPostgresBindings,
   type PgEdgeRouter
-} from '@bobra/framework/db';
+} from '@danylohotvianskyi/bobra-framework/db';
 import * as schema from './schema';
 
 export { isSQLite, type DatabaseContext, type DrizzleD1Client, type DrizzlePgClient, hasPostgresBindings };

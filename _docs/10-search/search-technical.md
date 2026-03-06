@@ -52,7 +52,7 @@ Bobra utilizes `websearch_to_tsquery`, which provides a safe, Google-like search
 Use the `createPostgresSearchQuery` utility from the search battery:
 
 ```typescript
-import { createPostgresSearchQuery } from '@bobra/framework/batteries/search';
+import { createPostgresSearchQuery } from '@danylohotvianskyi/bobra-framework/batteries/search';
 
 const results = await db
   .select()

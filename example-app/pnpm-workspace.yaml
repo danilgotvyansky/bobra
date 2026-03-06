@@ -1,0 +1,14 @@
+catalog:
+  "@danylohotvianskyi/bobra-framework": "^0.1.3"
+
+packages:
+  - handlers/*
+  - workers/*
+  - router/*
+  - shared-utils
+  - frontends/*
+
+ignoredBuiltDependencies:
+  - esbuild
+  - sharp
+  - workerd

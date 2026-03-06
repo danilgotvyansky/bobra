@@ -6,7 +6,7 @@
  * to serve files from the frontend's dist/ directory.
  */
 
-import { createCloudflareWorker, createHandlerArray, createSpaHandler } from '@bobra/framework/core';
+import { createCloudflareWorker, createHandlerArray, createSpaHandler } from '@danylohotvianskyi/bobra-framework/core';
 
 // Serve the dashboard frontend at /dashboard/*
 const dashboardHandler = createSpaHandler({

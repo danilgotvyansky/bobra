@@ -41,7 +41,7 @@ In your `schema.ts`, export all tables. Then, in your database client (`index.ts
 ```typescript
 // shared-utils/src/db/index.ts
 import * as schema from './schema';
-import { getDb as _getDb } from '@bobra/framework/db';
+import { getDb as _getDb } from '@danylohotvianskyi/bobra-framework/db';
 
 export function getDb(env: AppEnvBindings) {
   // Passing 'schema' enables type-safe queries: db.query.users.findFirst(...)

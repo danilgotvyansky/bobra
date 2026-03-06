@@ -1,11 +1,11 @@
 /**
  * Example App Router Worker
  *
- * Uses the shared createRouterWorker from @bobra/framework to avoid
+ * Uses the shared createRouterWorker from @danylohotvianskyi/bobra-framework to avoid
  * duplicating routing, proxy, and health-check logic.
  */
 
-import { createRouterWorker } from '@bobra/framework/network';
+import { createRouterWorker } from '@danylohotvianskyi/bobra-framework/network';
 
 export default createRouterWorker({
 	workerName: 'example-app-router-worker',

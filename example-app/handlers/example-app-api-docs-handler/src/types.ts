@@ -1,4 +1,4 @@
-import { type AppEnvBindings } from '@bobra/framework/db';
+import { type AppEnvBindings } from '@danylohotvianskyi/bobra-framework/db';
 
 export interface Env extends AppEnvBindings {
   // Additional bindings can be added here if needed

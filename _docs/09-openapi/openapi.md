@@ -44,7 +44,7 @@ import { vValidator } from '@hono/valibot-validator';
 import { 
   valibotSchemaToOpenAPIParameters, 
   generateListResponseSchema 
-} from '@bobra/framework/batteries/openapi';
+} from '@danylohotvianskyi/bobra-framework/batteries/openapi';
 
 const routes = new Hono<{ Bindings: Env }>()
   .get(
@@ -77,7 +77,7 @@ const routes = new Hono<{ Bindings: Env }>()
 
 ## OpenAPI Utilities
 
-Bobra provides several utilities in `@bobra/framework/batteries/openapi` to simplify schema management:
+Bobra provides several utilities in `@danylohotvianskyi/bobra-framework/batteries/openapi` to simplify schema management:
 
 ### `valibotSchemaToOpenAPIParameters`
 Automatically converts a Valibot object schema into an array of OpenAPI parameter objects. This is useful for `query` or `path` parameters when you need to manually override or complement the automatic discovery.

@@ -8,11 +8,11 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@bobra/framework": "workspace:*",
     "@hono/swagger-ui": "^0.5.2",
     "hono": "^4.11.9",
     "@scalar/hono-api-reference": "^0.9.18",
-    "@scalar/openapi-to-markdown": "^0.2.37"
+    "@scalar/openapi-to-markdown": "^0.2.37",
+    "@danylohotvianskyi/bobra-framework": "catalog:"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240925.0",

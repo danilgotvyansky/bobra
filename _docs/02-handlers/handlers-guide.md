@@ -7,8 +7,8 @@
 
 ```typescript
 import { Hono } from 'hono';
-import type { AppHandler } from '@bobra/framework/core';
-import { ensureApiToken } from '@bobra/framework/middleware';
+import type { AppHandler } from '@danylohotvianskyi/bobra-framework/core';
+import { ensureApiToken } from '@danylohotvianskyi/bobra-framework/middleware';
 // other imports...
 
 const routes = new Hono<{ Bindings: Env }>()
@@ -65,7 +65,7 @@ export default myHandler;
 Update `src/workers/main-worker/index.ts`:
 
 ```typescript
-import { createCloudflareWorker, createHandlerArray } from '@bobra/framework/core';
+import { createCloudflareWorker, createHandlerArray } from '@danylohotvianskyi/bobra-framework/core';
 // other handler imports...
 import myHandler from '../../../handlers/myhandler/src/index';
 
@@ -115,7 +115,7 @@ Typically you would put your SPA code to `frontends/your-app` and define handler
 
 ```typescript
 // workers/main-worker
-import { createSpaHandler } from '@bobra/framework';
+import { createSpaHandler } from '@danylohotvianskyi/bobra-framework';
 
 const dashboardHandler = createSpaHandler({
   name: 'actions',

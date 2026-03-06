@@ -181,4 +181,5 @@ git_diff.txt
 wrangler.jsonc
 config.local.yml
 
-prod-data.json
+# tarballs
+*.tgz
