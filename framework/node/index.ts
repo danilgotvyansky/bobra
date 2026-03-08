@@ -8,8 +8,8 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-export * from './generate-wrangler-config';
-import { parseDevVars } from '../core/env-resolver';
+export * from './generate-wrangler-config.js';
+import { parseDevVars } from '../core/env-resolver.js';
 
 /**
  * Load .dev.vars and .env files for Node.js scripts.

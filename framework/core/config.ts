@@ -98,6 +98,9 @@ export interface WorkerConfig {
     external_url?: string;
   }>;
   kv_namespaces?: WorkerKvNamespaceConfig[];
+  triggers?: {
+    crons?: string[];
+  };
   vars?: Record<string, string | number | boolean | JSONValue>;
   cf_routes?: CloudflareRoute[];
   observability?: {
@@ -157,7 +160,7 @@ export interface AppConfig {
 // Default configuration — apps should override these via their config.yml
 export const defaultConfig: AppConfig = {
   cors: {
-    origin: ['http://localhost:3000', 'http://localhost:8700'],
+    origin: ['*'],
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization'],
   },
@@ -179,6 +182,11 @@ export const defaultConfig: AppConfig = {
     description: 'Central routing worker',
     main: 'src/index.ts',
     routes: [],
+    observability: {
+      logs: {
+        enabled: false
+      }
+    }
   },
 };
 
