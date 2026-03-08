@@ -16,7 +16,87 @@ import {
   getServiceDiscovery,
 } from './config';
 import { serviceDiscoveryMiddleware } from '../network/service-discovery';
-import { openAPISpecs } from 'hono-openapi';
+import { generateSpecs } from 'hono-openapi';
+
+// Helper: collect schema $ref names referenced anywhere in the OpenAPI spec
+function collectReferencedSchemaNames(obj: any): Set<string> {
+  const set = new Set<string>();
+  function scan(val: any) {
+    if (typeof val === 'object' && val !== null) {
+      for (const k in val) {
+        if (k === '$ref' && typeof val[k] === 'string') {
+          const m = val[k].match(/^#\/components\/schemas\/([A-Za-z0-9_.-]+)/);
+          if (m && m[1]) set.add(m[1]);
+        } else {
+          scan(val[k]);
+        }
+      }
+    }
+  }
+  scan(obj);
+  return set;
+}
+
+function pruneComponents(full: any, paths: any, keepAlways: string[] = []) {
+  const result: any = { ...(full.components || {}) };
+  const schemas = (full.components && full.components.schemas) || {};
+
+  // Start with schemas referenced directly from paths
+  const refs = collectReferencedSchemaNames(paths);
+
+  // Always-keep schemas should be included in the starting set as well
+  for (const name of keepAlways) {
+    refs.add(name);
+  }
+
+  const kept: Record<string, any> = {};
+
+  // Traverse schema references transitively using a work queue to ensure 
+  // nested dependencies are not pruned.
+  const toVisit: string[] = Array.from(refs);
+  while (toVisit.length > 0) {
+    const name = toVisit.pop() as string;
+    const schema = schemas[name];
+
+    if (!schema || kept[name]) {
+      continue;
+    }
+
+    // Keep this schema
+    kept[name] = schema;
+
+    // Find any schemas it references and add them to the queue if not already seen
+    const nestedRefs = collectReferencedSchemaNames(schema);
+    for (const dep of nestedRefs) {
+      if (!refs.has(dep)) {
+        refs.add(dep);
+        toVisit.push(dep);
+      }
+    }
+  }
+
+  result.schemas = kept;
+  return result;
+}
+
+export interface OpenAPISpecOptions {
+  /** The path where the OpenAPI spec will be served (e.g. '/openapi', '/internal/openapi') */
+  path?: string;
+  /** Return true to exclude an operation from the generated OpenAPI spec */
+  excludeEndpoint?: (path: string, method: string, operation: any) => boolean;
+  /** Exclude operations that have any of these tags (e.g. ['internal']) */
+  excludeTags?: string[];
+  /** Whether or not to prune unreferenced OpenAPI component schemas (defaults to true if exclusions are used) */
+  pruneComponents?: boolean;
+  /** An array of schema names to always keep in the OpenAPI spec if pruneComponents is true */
+  pruneComponentsKeepAlways?: string[];
+  /** Additional security schemes to add to the OpenAPI spec */
+  securitySchemes?: Record<string, any>;
+}
+
+export interface WorkerOptions {
+  openapi?: OpenAPISpecOptions | OpenAPISpecOptions[];
+}
 
 // Worker environment interface
 export interface WorkerEnv {
@@ -26,7 +106,7 @@ export interface WorkerEnv {
 }
 
 // Create a new worker instance with common middleware
-export async function createWorker(env?: WorkerEnv): Promise<AppWorker> {
+export async function createWorker(env?: WorkerEnv, options?: WorkerOptions): Promise<AppWorker> {
   const app = new Hono<{ Bindings: WorkerEnv }>();
 
   const config = await loadConfig(env || {});
@@ -68,12 +148,13 @@ export async function createWorker(env?: WorkerEnv): Promise<AppWorker> {
   });
 
   // Worker-level OpenAPI with router base path prefixing
-  app.get('/openapi', (() => {
+  (() => {
     const specApp = new Hono<{ Bindings: WorkerEnv }>();
     const routerBase = getRouterBasePath(config);
     // Mount the worker app under router base path so generated paths include router base
     specApp.route(routerBase === '/' ? '/' : routerBase, app);
-    return openAPISpecs(specApp, {
+
+    const specOptions = {
       documentation: {
         info: {
           title: config.server.name,
@@ -81,10 +162,71 @@ export async function createWorker(env?: WorkerEnv): Promise<AppWorker> {
           description: config.server.description,
         },
       },
-    });
-  })());
+    } as any;
 
-  return new AppWorker(app, config, workerName, basePath);
+    const specDefs = options?.openapi
+      ? (Array.isArray(options.openapi) ? options.openapi : [options.openapi])
+      : [{ path: '/openapi' }];
+
+    for (const specDef of specDefs) {
+      const specPath = specDef.path || '/openapi';
+      app.get(specPath, async (c) => {
+        const full = await generateSpecs(specApp, specOptions, undefined, c);
+        const { excludeEndpoint, excludeTags, pruneComponents: specPrune, securitySchemes } = specDef;
+        const hasExclusions = !!excludeEndpoint || (!!excludeTags && excludeTags.length > 0);
+
+        let finalSpec = full;
+
+        if (hasExclusions) {
+          const filtered: any = { ...full, paths: {} };
+          for (const [path, ops] of Object.entries(full.paths || {})) {
+            const keepOps: any = {};
+            for (const [method, op] of Object.entries(ops as any)) {
+              let shouldExclude = false;
+              if (excludeEndpoint && excludeEndpoint(path, method, op)) {
+                shouldExclude = true;
+              }
+              if (!shouldExclude && excludeTags && Array.isArray((op as any).tags)) {
+                if ((op as any).tags.some((tag: string) => excludeTags.includes(tag))) {
+                  shouldExclude = true;
+                }
+              }
+
+              if (!shouldExclude) {
+                keepOps[method] = op;
+              }
+            }
+            if (Object.keys(keepOps).length > 0) filtered.paths[path] = keepOps;
+          }
+
+          const shouldPrune = specPrune ?? true;
+          if (shouldPrune) {
+            filtered.components = pruneComponents(full, filtered.paths, specDef.pruneComponentsKeepAlways || []);
+          } else {
+            filtered.components = full.components;
+          }
+          finalSpec = filtered;
+        }
+
+        if (securitySchemes) {
+          finalSpec = {
+            ...finalSpec,
+            components: {
+              ...(finalSpec.components || {}),
+              securitySchemes: {
+                ...(finalSpec.components?.securitySchemes || {}),
+                ...securitySchemes
+              }
+            }
+          };
+        }
+
+        return c.json(finalSpec, 200);
+      });
+    }
+  })();
+
+  return new AppWorker(app, config, workerName, basePath, options);
 }
 
 // Core worker class that manages handlers and their lifecycle
@@ -94,14 +236,16 @@ export class AppWorker {
   private config: AppConfig;
   private workerName: string;
   private basePath: string;
+  private options?: WorkerOptions;
   private initialized = false;
   private startupStack = new LogStack();
 
-  constructor(app: Hono<{ Bindings: WorkerEnv }>, config: AppConfig, workerName: string, basePath: string) {
+  constructor(app: Hono<{ Bindings: WorkerEnv }>, config: AppConfig, workerName: string, basePath: string, options?: WorkerOptions) {
     this.app = app;
     this.config = config;
     this.workerName = workerName;
     this.basePath = basePath;
+    this.options = options;
 
     // Register this worker's main app in the unified registry
     appWorkerRegistry.registerMainApp(workerName, app);
@@ -222,6 +366,34 @@ export class AppWorker {
     };
   }
 
+  getScheduledFunction(): ((event: any, env: WorkerEnv, ctx: any) => Promise<void>) | undefined {
+    const scheduledHandlers = this.handlers.filter(h => typeof h.scheduled === 'function');
+
+    if (scheduledHandlers.length === 0) {
+      return undefined;
+    }
+
+    return async (event: any, env: WorkerEnv, ctx: any) => {
+      await this.initialize(env);
+
+      const promises = scheduledHandlers.map(async (handler) => {
+        try {
+          const logger = getLogger();
+          try {
+            logger.setHandler?.(handler.name);
+            await handler.scheduled!(event, env, ctx);
+          } finally {
+            logger.setHandler?.('');
+          }
+        } catch (error) {
+          getLogger().error(`Scheduled task error in handler ${handler.name}`, error instanceof Error ? error : new Error(String(error)));
+        }
+      });
+
+      await Promise.all(promises);
+    };
+  }
+
   // Add a handler to the worker
   async add(handlerModule: Promise<{ default: AppHandler }> | { default: AppHandler }): Promise<this> {
     try {
@@ -258,7 +430,7 @@ export class AppWorker {
       }
 
       if (handler.name !== 'api-docs') {
-        this.app.get(`${handlerPath}/openapi`, (() => {
+        (() => {
           const specApp = new Hono<{ Bindings: WorkerEnv }>();
           const routerBase = getRouterBasePath(this.config);
           const prefix = routerBase === '/' ? handlerPath : `${routerBase}${handlerPath}`;
@@ -269,7 +441,12 @@ export class AppWorker {
             componentSchemas = handler.componentSchemas;
           }
 
-          return openAPISpecs(specApp, {
+          let handlerSecuritySchemes = {};
+          if (handler.securitySchemes) {
+            handlerSecuritySchemes = handler.securitySchemes;
+          }
+
+          const specOptions = {
             documentation: {
               info: {
                 title: `${this.config.server.name} - ${handler.name}`,
@@ -278,10 +455,72 @@ export class AppWorker {
               },
               components: {
                 schemas: componentSchemas,
+                securitySchemes: handlerSecuritySchemes,
               },
             },
-          });
-        })());
+          } as any;
+
+          const specDefs = this.options?.openapi
+            ? (Array.isArray(this.options.openapi) ? this.options.openapi : [this.options.openapi])
+            : [{ path: '/openapi' }];
+
+          for (const specDef of specDefs) {
+            const specPath = specDef.path || '/openapi';
+            this.app.get(`${handlerPath}${specPath}`, async (c) => {
+              const full = await generateSpecs(specApp, specOptions, undefined, c);
+              const { excludeEndpoint, excludeTags, pruneComponents: specPrune, securitySchemes } = specDef;
+              const hasExclusions = !!excludeEndpoint || (!!excludeTags && excludeTags.length > 0);
+
+              let finalSpec = full;
+
+              if (hasExclusions) {
+                const filtered: any = { ...full, paths: {} };
+                for (const [path, ops] of Object.entries(full.paths || {})) {
+                  const keepOps: any = {};
+                  for (const [method, op] of Object.entries(ops as any)) {
+                    let shouldExclude = false;
+                    if (excludeEndpoint && excludeEndpoint(path, method, op)) {
+                      shouldExclude = true;
+                    }
+                    if (!shouldExclude && excludeTags && Array.isArray((op as any).tags)) {
+                      if ((op as any).tags.some((tag: string) => excludeTags.includes(tag))) {
+                        shouldExclude = true;
+                      }
+                    }
+
+                    if (!shouldExclude) {
+                      keepOps[method] = op;
+                    }
+                  }
+                  if (Object.keys(keepOps).length > 0) filtered.paths[path] = keepOps;
+                }
+
+                const shouldPrune = specPrune ?? true;
+                if (shouldPrune) {
+                  filtered.components = pruneComponents(full, filtered.paths, specDef.pruneComponentsKeepAlways || []);
+                } else {
+                  filtered.components = full.components;
+                }
+                finalSpec = filtered;
+              }
+
+              if (securitySchemes) {
+                finalSpec = {
+                  ...finalSpec,
+                  components: {
+                    ...(finalSpec.components || {}),
+                    securitySchemes: {
+                      ...(finalSpec.components?.securitySchemes || {}),
+                      ...securitySchemes
+                    }
+                  }
+                };
+              }
+
+              return c.json(finalSpec, 200);
+            });
+          }
+        })();
       }
 
       // Mount handler routes with base path
@@ -355,6 +594,7 @@ export class AppWorker {
   export() {
     const self = this;
     const queueFunction = this.getQueueFunction();
+    const scheduledFunction = this.getScheduledFunction();
 
     const workerExport: any = {
       async fetch(request: any, env: WorkerEnv, ctx: any) {
@@ -396,6 +636,15 @@ export class AppWorker {
       };
     }
 
+    if (scheduledFunction) {
+      workerExport.scheduled = async (event: any, env: WorkerEnv, ctx: any) => {
+        const globalVars = (self.config as any).vars || {};
+        const workerVars = (self.config.workers?.[self.workerName]?.vars) || {};
+        const mergedEnv = { ...env, ...globalVars, ...workerVars } as WorkerEnv;
+        await scheduledFunction(event, mergedEnv, ctx);
+      };
+    }
+
     return workerExport;
   }
 }
@@ -408,7 +657,8 @@ export function createHandlerArray(...handlers: AppHandler[]): Array<Promise<{ d
 // Convenience function to create a Cloudflare Worker from handler imports
 export function createCloudflareWorker(
   workerName: string,
-  handlers: Array<Promise<{ default: AppHandler }> | { default: AppHandler }>
+  handlers: Array<Promise<{ default: AppHandler }> | { default: AppHandler }>,
+  options?: WorkerOptions
 ) {
   return {
     async fetch(request: Request, env: WorkerEnv, ctx: any): Promise<Response> {
@@ -423,7 +673,7 @@ export function createCloudflareWorker(
         const cfContinent = request.headers?.get?.('X-CF-Continent') || (request as any).cf?.continent;
         if (cfContinent) (workerEnv as any).__cfContinent = cfContinent;
 
-        const worker = await createWorker(workerEnv);
+        const worker = await createWorker(workerEnv, options);
 
         for (const handler of handlers) {
           await worker.add(handler);
@@ -452,7 +702,7 @@ export function createCloudflareWorker(
           WORKER_NAME: workerName
         };
 
-        const worker = await createWorker(workerEnv);
+        const worker = await createWorker(workerEnv, options);
 
         for (const handler of handlers) {
           await worker.add(handler);
@@ -469,6 +719,33 @@ export function createCloudflareWorker(
 
       } catch (error) {
         getLogger().error(`${workerName} queue processing error`, error instanceof Error ? error : new Error(String(error)));
+        throw error;
+      }
+    },
+
+    async scheduled(event: any, env: WorkerEnv, ctx: any): Promise<void> {
+      try {
+        const workerEnv = {
+          ...env,
+          WORKER_NAME: workerName
+        };
+
+        const worker = await createWorker(workerEnv);
+
+        for (const handler of handlers) {
+          await worker.add(handler);
+        }
+        const scheduledFunction = worker.getScheduledFunction();
+
+        if (!scheduledFunction) {
+          getLogger().warn(`No scheduled function found in handlers for worker ${workerName}`);
+          return;
+        }
+
+        await scheduledFunction(event, workerEnv, ctx);
+
+      } catch (error) {
+        getLogger().error(`${workerName} scheduled task error`, error instanceof Error ? error : new Error(String(error)));
         throw error;
       }
     }

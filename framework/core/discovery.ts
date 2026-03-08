@@ -10,6 +10,8 @@ export interface AppHandler {
   version: string;
   routes: Hono<any>;
   componentSchemas?: Record<string, any>;
+  /** Additional security schemes to declare in the handler's OpenAPI spec */
+  securitySchemes?: Record<string, any>;
   // Allow handlers to initialize their own logger with the worker's config
   initLogger?: (config: Partial<LoggerConfig>, context?: string, worker?: string, handler?: string) => void;
   // Allow handlers to perform async initialization (e.g., database connections)
@@ -20,6 +22,8 @@ export interface AppHandler {
   handlesQueue?: (queueName: string, configuredQueues: string[]) => boolean;
   // Let the handler mount directly on root path
   ignoreWorkerBasePath?: boolean;
+  // Optional scheduled handler
+  scheduled?: (event: any, env: any, ctx: any) => Promise<void> | void;
 }
 
 /**

@@ -31,7 +31,7 @@
 
 import 'dotenv/config';
 import * as path from 'path';
-import { loadEnvFiles } from '../node';
+import { loadEnvFiles } from '../node/index.js';
 
 // Load .dev.vars and .env files (Node.js only)
 if (typeof process !== 'undefined' && process.versions && process.versions.node) {
@@ -62,7 +62,7 @@ if (isNode) {
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate as pgMigrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
-import { createPublicApiToken } from '../batteries/auth/token';
+import { createPublicApiToken } from '../batteries/auth/token.js';
 
 // Configuration based on database engine
 const getConfig = () => {
