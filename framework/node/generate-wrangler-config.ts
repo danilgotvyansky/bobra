@@ -19,7 +19,7 @@ import {
   getDatabaseBinding,
   getWorkerQueueBindings,
   getWorkerDbEngine
-} from '../core/config';
+} from '../core/config.js';
 import { JSONValue } from 'hono/utils/types';
 import { gzipSync } from 'zlib';
 
@@ -89,6 +89,9 @@ interface WranglerConfig {
       max_concurrency?: number;
       retry_delay?: number;
     }>;
+  };
+  triggers?: {
+    crons?: string[];
   };
   kv_namespaces?: Array<{
     binding: string;
@@ -383,6 +386,11 @@ export function generateWranglerConfig(config: AppConfig, workerType: string, wo
       if (queueBindings.consumers.length > 0) {
         wranglerConfig.queues.consumers = queueBindings.consumers;
       }
+    }
+
+    // Add cron triggers if specified
+    if (workerConfig?.triggers?.crons && workerConfig.triggers.crons.length > 0) {
+      wranglerConfig.triggers = { crons: workerConfig.triggers.crons };
     }
 
     if (workerConfig?.cf_routes) {

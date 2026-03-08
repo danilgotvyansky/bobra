@@ -8,12 +8,12 @@ importers:
 
   .:
     dependencies:
-      '@cloudflare/workers-types':
-        specifier: ^4.20240925.0
-        version: 4.20260305.1
       '@hono/valibot-validator':
         specifier: ^0.5.2
         version: 0.5.3(hono@4.12.5)(valibot@1.2.0(typescript@5.9.3))
+      '@types/pg':
+        specifier: ^8.11.2
+        version: 8.18.0
       '@valibot/to-json-schema':
         specifier: ^1.3.0
         version: 1.5.0(valibot@1.2.0(typescript@5.9.3))
@@ -22,10 +22,10 @@ importers:
         version: 16.6.1
       drizzle-orm:
         specifier: ^0.44.3
-        version: 0.44.7(@cloudflare/workers-types@4.20260305.1)(@types/pg@8.18.0)(pg@8.20.0)(postgres@3.4.8)
+        version: 0.44.7(@cloudflare/workers-types@4.20260307.1)(@types/pg@8.18.0)(pg@8.20.0)(postgres@3.4.8)
       drizzle-valibot:
         specifier: ^0.4.2
-        version: 0.4.2(drizzle-orm@0.44.7(@cloudflare/workers-types@4.20260305.1)(@types/pg@8.18.0)(pg@8.20.0)(postgres@3.4.8))(valibot@1.2.0(typescript@5.9.3))
+        version: 0.4.2(drizzle-orm@0.44.7(@cloudflare/workers-types@4.20260307.1)(@types/pg@8.18.0)(pg@8.20.0)(postgres@3.4.8))(valibot@1.2.0(typescript@5.9.3))
       hono:
         specifier: ^4.11.9
         version: 4.12.5
@@ -48,15 +48,15 @@ importers:
         specifier: ^1.1.0
         version: 1.2.0(typescript@5.9.3)
     devDependencies:
+      '@cloudflare/workers-types':
+        specifier: ^4.20260307.1
+        version: 4.20260307.1
       '@types/js-yaml':
         specifier: ^4.0.9
         version: 4.0.9
       '@types/node':
         specifier: ^20.19.4
         version: 20.19.35
-      '@types/pg':
-        specifier: ^8.11.2
-        version: 8.18.0
       drizzle-kit:
         specifier: ^0.31.4
         version: 0.31.9
@@ -70,8 +70,8 @@ packages:
     resolution: {integrity: sha512-60vepv88RwcJtSHrD6MjIL6Ta3SOYbgfnkHb+ppAVK+o9mXprRtulx7VlRl3lN3bbvysAfCS7WMVfhUYemB0IQ==}
     engines: {node: '>= 16'}
 
-  '@cloudflare/workers-types@4.20260305.1':
-    resolution: {integrity: sha512-835BZaIcgjuYIUqgOWJSpwQxFSJ8g/X1OCZFLO7bmirM6TGmVgIGwiGItBgkjUXXCPrYzJEldsJkuFuK7ePuMw==}
+  '@cloudflare/workers-types@4.20260307.1':
+    resolution: {integrity: sha512-0PvWLVVD6Q64V/XhollYtc8H35Vxm2rZi8bkZbEr3lK+mNgd2FBBVhlZ6A3saAUq3giRF4US/UfU/3a8i1PEcg==}
 
   '@cspotcode/source-map-support@0.8.1':
     resolution: {integrity: sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw==}
@@ -769,7 +769,7 @@ snapshots:
       '@types/json-schema': 7.0.15
       js-yaml: 4.1.1
 
-  '@cloudflare/workers-types@4.20260305.1': {}
+  '@cloudflare/workers-types@4.20260307.1': {}
 
   '@cspotcode/source-map-support@0.8.1':
     dependencies:
@@ -1006,16 +1006,16 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  drizzle-orm@0.44.7(@cloudflare/workers-types@4.20260305.1)(@types/pg@8.18.0)(pg@8.20.0)(postgres@3.4.8):
+  drizzle-orm@0.44.7(@cloudflare/workers-types@4.20260307.1)(@types/pg@8.18.0)(pg@8.20.0)(postgres@3.4.8):
     optionalDependencies:
-      '@cloudflare/workers-types': 4.20260305.1
+      '@cloudflare/workers-types': 4.20260307.1
       '@types/pg': 8.18.0
       pg: 8.20.0
       postgres: 3.4.8
 
-  drizzle-valibot@0.4.2(drizzle-orm@0.44.7(@cloudflare/workers-types@4.20260305.1)(@types/pg@8.18.0)(pg@8.20.0)(postgres@3.4.8))(valibot@1.2.0(typescript@5.9.3)):
+  drizzle-valibot@0.4.2(drizzle-orm@0.44.7(@cloudflare/workers-types@4.20260307.1)(@types/pg@8.18.0)(pg@8.20.0)(postgres@3.4.8))(valibot@1.2.0(typescript@5.9.3)):
     dependencies:
-      drizzle-orm: 0.44.7(@cloudflare/workers-types@4.20260305.1)(@types/pg@8.18.0)(pg@8.20.0)(postgres@3.4.8)
+      drizzle-orm: 0.44.7(@cloudflare/workers-types@4.20260307.1)(@types/pg@8.18.0)(pg@8.20.0)(postgres@3.4.8)
       valibot: 1.2.0(typescript@5.9.3)
 
   esbuild-register@3.6.0(esbuild@0.25.12):

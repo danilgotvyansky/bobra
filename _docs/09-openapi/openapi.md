@@ -104,6 +104,108 @@ The Bobra `api-docs` handler (or the global router) provides several out-of-the-
 - **`/scalar`**: Serves the modern **Scalar API Reference**.
 - **`/llms.txt`**: Serves a Markdown representation of your API, optimized for ingestion by LLMs and AI agents (see [llmstxt.org](https://llmstxt.org/)).
 
+### Advanced OpenAPI Configuration
+
+Bobra allows multi-spec configurations, enabling you to serve different versions or visibility levels of your API (e.g., Public vs. Restricted).
+
+#### Multiple Endpoints & Tag Exclusions
+
+You can configure multiple OpenAPI endpoints in your `WorkerOptions`. This is useful for excluding restricted-only routes from public documentation while keeping them in restricted docs.
+
+```typescript
+export const workerOptions: WorkerOptions = {
+  openapi: [
+    {
+      path: '/openapi',
+      excludeTags: ['restricted'],
+      pruneComponents: true,
+    },
+    {
+      path: '/restricted/openapi',
+      pruneComponents: false, // keep everything
+    }
+  ]
+};
+```
+
+#### Custom Security Schemes
+
+You can inject additional security schemes into specific OpenAPI specifications:
+
+```typescript
+export const workerOptions: WorkerOptions = {
+  openapi: [
+    {
+      path: '/restricted/openapi',
+      securitySchemes: {
+        RestrictedToken: {
+          type: 'apiKey',
+          in: 'header',
+          name: 'X-Restricted-Token',
+          description: 'Restricted-scoped access token header',
+        },
+      }
+    }
+  ]
+};
+```
+
+### Handler-level Security Schemes
+
+Handlers can also declare their own `securitySchemes` to ensure their local `/openapi` specs are valid:
+
+```typescript
+// in handlers/users/src/index.ts
+const handler: AppHandler = {
+  name: 'platform-users-handler',
+  version: '1.0.0',
+  securitySchemes: {
+    RestrictedToken: {
+      type: 'apiKey',
+      in: 'header',
+      name: 'X-Restricted-Token',
+    }
+  },
+  // ...
+};
+```
+
+### Endpoint-Specific Security
+
+To apply a specific security schema to an endpoint (overriding the global default), use the `security` property inside `describeRoute`:
+
+```typescript
+app.get(
+  '/restricted',
+  describeRoute({
+    description: 'Restricted endpoint',
+    tags: ['restricted'],
+    security: [{ RestrictedToken: [] }] // Only RestrictedToken is available for this endpoint
+  }),
+  // ...
+);
+```
+
+### Path-based Exclusions
+
+Beyond tags, you can use `excludeEndpoint` for more granular control:
+
+```typescript
+openapi: {
+  excludeEndpoint: (path, method, operation) => {
+    return path.startsWith('/private/');
+  }
+}
+```
+
+### Component Pruning
+
+When endpoints are excluded, Bobra can automatically "prune" unreferenced component schemas to keep the documentation clean.
+
+- **`pruneComponents`**: (Boolean) If true, removes schemas not used by any remaining paths.
+- **`pruneComponentsKeepAlways`**: (String[]) List of schema names that should never be pruned, even if unreferenced.
+
+
 ### How it works
 1.  **Handlers** export their local spec via `/openapi`.
 2.  **Router** (or Docs Handler) fetches specs from all handlers via `serviceFetch`.
