@@ -1,4 +1,5 @@
 import { getLogger } from '../../logging/logger';
+import { isSQLite, type DatabaseContext } from '../../db/client';
 
 // Token hash algorithm configuration
 const HASH_CONFIG = {
@@ -17,15 +18,14 @@ export async function hashToken(token: string, salt: string): Promise<string> {
 
 // Find a token record by computing hash against all stored records
 export async function findTokenByHash(
-  db: any,
+  ctx: DatabaseContext<any>,
   token: string,
   schema: any,
-  useSqlite?: boolean
 ) {
   try {
-    const t = useSqlite ? schema.tokensSqlite : schema.tokens;
-    const tokenRecords = await db.select({
-      id: (t as any).uid,
+    const t = isSQLite(ctx) ? schema.tokensSqlite : schema.tokens;
+    const tokenRecords = await (ctx.db as any).select({
+      uid: (t as any).uid,
       tokenHash: t.tokenHash,
       tokenSalt: t.tokenSalt,
       expiresAt: t.expiresAt,

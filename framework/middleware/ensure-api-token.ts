@@ -4,7 +4,7 @@ import { validateToken, extractAuthToken } from '../batteries/auth/token-validat
 export interface EnsureApiTokenOptions {
   getTokenValidationProvider: (c: any) => TokenValidationProvider;
   getOrgContext?: (c: any) => Promise<string | null> | string | null;
-  verifyTokenScope?: (env: any, orgContext: string, tokenId: string) => Promise<boolean>;
+  verifyTokenScope?: (env: any, orgContext: string, tokenUid: string) => Promise<boolean>;
 }
 
 export function ensureApiToken(options: EnsureApiTokenOptions) {
@@ -39,7 +39,7 @@ export function ensureApiToken(options: EnsureApiTokenOptions) {
           return c.json({ valid: false, reason: 'Organization context required' }, 400);
         }
 
-        const isLinked = await options.verifyTokenScope(env, orgContext as string, result.tokenInfo.id);
+        const isLinked = await options.verifyTokenScope(env, orgContext as string, result.tokenInfo.uid);
         if (!isLinked) {
           return c.json({ valid: false, reason: 'Token is not linked to this organization' }, 403);
         }

@@ -1,1 +1,4 @@
 *.tgz
+*sync-conflict*
+*.syncthing.*
+*.tmp
