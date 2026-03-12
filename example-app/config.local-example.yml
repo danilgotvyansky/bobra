@@ -11,8 +11,6 @@ cors:
   allowHeaders:
     - "Content-Type"
     - "Authorization"
-    - "X-Org-Context"
-    - "X-Schema-Token"
     - "X-Spa-Access-Token"
     - "X-Forwarded-For"
     - "X-Forwarded-By"
@@ -119,6 +117,29 @@ workers:
       html_handling: "none"
       run_worker_first: false
 
+  example-app-api-token-worker:
+    name: "example-app-api-token-worker"
+    port: 8783
+    inspector_port: 8223
+    description: "API token worker"
+    main: "src/index.ts"
+    handlers:
+      - "api-token"
+    database:
+      postgres:
+        binding: "POSTGRES"
+        id: "example-app-postgres-db"
+        localConnectionString: "postgresql://example_app_user:example_app_password@localhost:5432/example_app-db"
+      d1:
+        binding: "D1"
+        database_name: "example-app-db"
+        database_id: "example-app-db"
+        migrations_dir: "../../shared-utils/src/db/migrations-sqlite"
+    services:
+      - binding: "EXAMPLE_APP_ROUTER"
+        service: "example-app-router-worker"
+        external_url: "http://localhost:8700"
+
 # Router configuration
 router:
   name: example-app-router-worker
@@ -150,7 +171,9 @@ router:
     # API Routes
     - path: "/api/api-docs*"
       service: "example-app-api-docs-worker"
-    
+    - path: "/api/api-token*"
+      service: "example-app-api-token-worker"
+
     # Frontend Routes
     - path: "/dashboard*"
       service: "example-app-dashboard-worker"
