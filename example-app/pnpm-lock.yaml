@@ -6,17 +6,35 @@ settings:
 
 catalogs:
   default:
-    '@danylohotvianskyi/bobra-framework':
-      specifier: ^0.1.3
-      version: 0.1.3
+    '@cloudflare/workers-types':
+      specifier: ^4.20260307.1
+      version: 4.20260312.1
+    '@hono/valibot-validator':
+      specifier: ^0.5.2
+      version: 0.5.3
+    '@valibot/to-json-schema':
+      specifier: ^1.3.0
+      version: 1.5.0
+    hono:
+      specifier: ^4.11.9
+      version: 4.12.5
+    hono-openapi:
+      specifier: ^0.4.8
+      version: 0.4.8
+    valibot:
+      specifier: ^1.1.0
+      version: 1.2.0
+
+overrides:
+  '@danylohotvianskyi/bobra-framework': file:../framework
 
 importers:
 
   .:
     dependencies:
       '@danylohotvianskyi/bobra-framework':
-        specifier: 'catalog:'
-        version: 0.1.3(@types/node@22.19.15)(@types/pg@8.18.0)(openapi-types@12.1.3)(typescript@5.9.3)(zod@3.24.1)
+        specifier: file:../framework
+        version: file:../framework(@types/node@22.19.15)(openapi-types@12.1.3)(typescript@5.9.3)(zod@3.24.1)
       concurrently:
         specifier: ^9.2.0
         version: 9.2.1
@@ -35,7 +53,7 @@ importers:
         version: 5.9.3
       wrangler:
         specifier: ^4.63.0
-        version: 4.71.0(@cloudflare/workers-types@4.20260305.1)
+        version: 4.71.0(@cloudflare/workers-types@4.20260312.1)
 
   frontends/example-dashboard:
     devDependencies:
@@ -46,8 +64,8 @@ importers:
   handlers/example-app-api-docs-handler:
     dependencies:
       '@danylohotvianskyi/bobra-framework':
-        specifier: 'catalog:'
-        version: 0.1.3(@types/node@22.19.15)(@types/pg@8.18.0)(openapi-types@12.1.3)(typescript@5.9.3)(zod@3.24.1)
+        specifier: file:../../../framework
+        version: file:../framework(@types/node@22.19.15)(openapi-types@12.1.3)(typescript@5.9.3)(zod@3.24.1)
       '@hono/swagger-ui':
         specifier: ^0.5.2
         version: 0.5.3(hono@4.12.5)
@@ -58,12 +76,46 @@ importers:
         specifier: ^0.2.37
         version: 0.2.45(typescript@5.9.3)
       hono:
-        specifier: ^4.11.9
+        specifier: 'catalog:'
         version: 4.12.5
     devDependencies:
       '@cloudflare/workers-types':
-        specifier: ^4.20240925.0
-        version: 4.20260305.1
+        specifier: 'catalog:'
+        version: 4.20260312.1
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+
+  handlers/example-app-api-token-handler:
+    dependencies:
+      '@danylohotvianskyi/bobra-framework':
+        specifier: file:../../../framework
+        version: file:../framework(@types/node@22.19.15)(openapi-types@12.1.3)(typescript@5.9.3)(zod@3.24.1)
+      '@hono/valibot-validator':
+        specifier: 'catalog:'
+        version: 0.5.3(hono@4.12.5)(valibot@1.2.0(typescript@5.9.3))
+      '@valibot/to-json-schema':
+        specifier: 'catalog:'
+        version: 1.5.0(valibot@1.2.0(typescript@5.9.3))
+      drizzle-orm:
+        specifier: ^0.44.3
+        version: 0.44.7(@cloudflare/workers-types@4.20260312.1)(@types/pg@8.18.0)(pg@8.20.0)(postgres@3.4.8)
+      drizzle-valibot:
+        specifier: ^0.4.2
+        version: 0.4.2(drizzle-orm@0.44.7(@cloudflare/workers-types@4.20260312.1)(@types/pg@8.18.0)(pg@8.20.0)(postgres@3.4.8))(valibot@1.2.0(typescript@5.9.3))
+      hono:
+        specifier: 'catalog:'
+        version: 4.12.5
+      hono-openapi:
+        specifier: 'catalog:'
+        version: 0.4.8(@hono/valibot-validator@0.5.3(hono@4.12.5)(valibot@1.2.0(typescript@5.9.3)))(@valibot/to-json-schema@1.5.0(valibot@1.2.0(typescript@5.9.3)))(hono@4.12.5)(openapi-types@12.1.3)(valibot@1.2.0(typescript@5.9.3))(zod@3.24.1)
+      valibot:
+        specifier: 'catalog:'
+        version: 1.2.0(typescript@5.9.3)
+    devDependencies:
+      '@cloudflare/workers-types':
+        specifier: 'catalog:'
+        version: 4.20260312.1
       typescript:
         specifier: ^5.6.0
         version: 5.9.3
@@ -71,8 +123,8 @@ importers:
   router/example-app-router-worker:
     dependencies:
       '@danylohotvianskyi/bobra-framework':
-        specifier: 'catalog:'
-        version: 0.1.3(@types/node@22.19.15)(@types/pg@8.18.0)(openapi-types@12.1.3)(typescript@5.9.3)(zod@3.24.1)
+        specifier: file:../../../framework
+        version: file:../framework(@types/node@22.19.15)(openapi-types@12.1.3)(typescript@5.9.3)(zod@3.24.1)
       hono:
         specifier: ^4.11.9
         version: 4.12.5
@@ -93,20 +145,20 @@ importers:
   shared-utils:
     dependencies:
       '@cloudflare/workers-types':
-        specifier: ^4.20240925.0
-        version: 4.20260305.1
-      '@danylohotvianskyi/bobra-framework':
         specifier: 'catalog:'
-        version: 0.1.3(@types/node@20.19.37)(@types/pg@8.18.0)(openapi-types@12.1.3)(typescript@5.9.3)(zod@3.24.1)
+        version: 4.20260312.1
+      '@danylohotvianskyi/bobra-framework':
+        specifier: file:../../framework
+        version: file:../framework(@types/node@20.19.37)(openapi-types@12.1.3)(typescript@5.9.3)(zod@3.24.1)
       dotenv:
         specifier: ^16.4.1
         version: 16.6.1
       drizzle-orm:
         specifier: ^0.44.3
-        version: 0.44.7(@cloudflare/workers-types@4.20260305.1)(@types/pg@8.18.0)(pg@8.20.0)(postgres@3.4.8)
+        version: 0.44.7(@cloudflare/workers-types@4.20260312.1)(@types/pg@8.18.0)(pg@8.20.0)(postgres@3.4.8)
       drizzle-valibot:
         specifier: ^0.4.2
-        version: 0.4.2(drizzle-orm@0.44.7(@cloudflare/workers-types@4.20260305.1)(@types/pg@8.18.0)(pg@8.20.0)(postgres@3.4.8))(valibot@1.2.0(typescript@5.9.3))
+        version: 0.4.2(drizzle-orm@0.44.7(@cloudflare/workers-types@4.20260312.1)(@types/pg@8.18.0)(pg@8.20.0)(postgres@3.4.8))(valibot@1.2.0(typescript@5.9.3))
       pg:
         specifier: ^8.16.3
         version: 8.20.0
@@ -116,6 +168,9 @@ importers:
       ts-node:
         specifier: ^10.9.2
         version: 10.9.2(@types/node@20.19.37)(typescript@5.9.3)
+      valibot:
+        specifier: 'catalog:'
+        version: 1.2.0(typescript@5.9.3)
     devDependencies:
       '@types/node':
         specifier: ^20.19.4
@@ -133,8 +188,8 @@ importers:
   workers/example-app-api-docs-worker:
     dependencies:
       '@danylohotvianskyi/bobra-framework':
-        specifier: 'catalog:'
-        version: 0.1.3(@types/node@22.19.15)(@types/pg@8.18.0)(openapi-types@12.1.3)(typescript@5.9.3)(zod@3.24.1)
+        specifier: file:../../../framework
+        version: file:../framework(@types/node@22.19.15)(openapi-types@12.1.3)(typescript@5.9.3)(zod@3.24.1)
       '@example-app/api-docs-handler':
         specifier: workspace:*
         version: link:../../handlers/example-app-api-docs-handler
@@ -149,11 +204,30 @@ importers:
         specifier: ^5.6.0
         version: 5.9.3
 
+  workers/example-app-api-token-worker:
+    dependencies:
+      '@danylohotvianskyi/bobra-framework':
+        specifier: file:../../../framework
+        version: file:../framework(@types/node@22.19.15)(openapi-types@12.1.3)(typescript@5.9.3)(zod@3.24.1)
+      '@example-app/api-token-handler':
+        specifier: workspace:*
+        version: link:../../handlers/example-app-api-token-handler
+      hono:
+        specifier: 'catalog:'
+        version: 4.12.5
+    devDependencies:
+      '@cloudflare/workers-types':
+        specifier: 'catalog:'
+        version: 4.20260312.1
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+
   workers/example-app-dashboard-worker:
     dependencies:
       '@danylohotvianskyi/bobra-framework':
-        specifier: 'catalog:'
-        version: 0.1.3(@types/node@22.19.15)(@types/pg@8.18.0)(openapi-types@12.1.3)(typescript@5.9.3)(zod@3.24.1)
+        specifier: file:../../../framework
+        version: file:../framework(@types/node@22.19.15)(openapi-types@12.1.3)(typescript@5.9.3)(zod@3.24.1)
     devDependencies:
       '@cloudflare/workers-types':
         specifier: ^4.20240925.0
@@ -231,12 +305,15 @@ packages:
   '@cloudflare/workers-types@4.20260305.1':
     resolution: {integrity: sha512-835BZaIcgjuYIUqgOWJSpwQxFSJ8g/X1OCZFLO7bmirM6TGmVgIGwiGItBgkjUXXCPrYzJEldsJkuFuK7ePuMw==}
 
+  '@cloudflare/workers-types@4.20260312.1':
+    resolution: {integrity: sha512-ySoTKc2ZKpwHll4H6byPWkxI/vmCc86B4h+hKo077zSTmBqIcxvbFozmOcEY7dhudMMDBnCgwZ9FknRrJxyqiQ==}
+
   '@cspotcode/source-map-support@0.8.1':
     resolution: {integrity: sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw==}
     engines: {node: '>=12'}
 
-  '@danylohotvianskyi/bobra-framework@0.1.3':
-    resolution: {integrity: sha512-sDSrhtmNqv6Cbrlc5rULm0GqkMUQiHogrZbOf+P8QmwYHkYDNIDPUJdbIG5w/C0MDldJBoyW/otCEBGb0VWMng==}
+  '@danylohotvianskyi/bobra-framework@file:../framework':
+    resolution: {directory: ../framework, type: directory}
 
   '@drizzle-team/brocli@0.10.2':
     resolution: {integrity: sha512-z33Il7l5dKjUgGULTqBsQBQwckHh5AbIuxhdsIxDDiZAzBOrZO6q9ogcWC65kU382AfynTfgNumVcNIjuIua6w==}
@@ -2523,18 +2600,21 @@ snapshots:
 
   '@cloudflare/workers-types@4.20260305.1': {}
 
+  '@cloudflare/workers-types@4.20260312.1': {}
+
   '@cspotcode/source-map-support@0.8.1':
     dependencies:
       '@jridgewell/trace-mapping': 0.3.9
 
-  '@danylohotvianskyi/bobra-framework@0.1.3(@types/node@20.19.37)(@types/pg@8.18.0)(openapi-types@12.1.3)(typescript@5.9.3)(zod@3.24.1)':
+  '@danylohotvianskyi/bobra-framework@file:../framework(@types/node@20.19.37)(openapi-types@12.1.3)(typescript@5.9.3)(zod@3.24.1)':
     dependencies:
-      '@cloudflare/workers-types': 4.20260305.1
+      '@cloudflare/workers-types': 4.20260312.1
       '@hono/valibot-validator': 0.5.3(hono@4.12.5)(valibot@1.2.0(typescript@5.9.3))
+      '@types/pg': 8.18.0
       '@valibot/to-json-schema': 1.5.0(valibot@1.2.0(typescript@5.9.3))
       dotenv: 16.6.1
-      drizzle-orm: 0.44.7(@cloudflare/workers-types@4.20260305.1)(@types/pg@8.18.0)(pg@8.20.0)(postgres@3.4.8)
-      drizzle-valibot: 0.4.2(drizzle-orm@0.44.7(@cloudflare/workers-types@4.20260305.1)(@types/pg@8.18.0)(pg@8.20.0)(postgres@3.4.8))(valibot@1.2.0(typescript@5.9.3))
+      drizzle-orm: 0.44.7(@cloudflare/workers-types@4.20260312.1)(@types/pg@8.18.0)(pg@8.20.0)(postgres@3.4.8)
+      drizzle-valibot: 0.4.2(drizzle-orm@0.44.7(@cloudflare/workers-types@4.20260312.1)(@types/pg@8.18.0)(pg@8.20.0)(postgres@3.4.8))(valibot@1.2.0(typescript@5.9.3))
       hono: 4.12.5
       hono-openapi: 0.4.8(@hono/valibot-validator@0.5.3(hono@4.12.5)(valibot@1.2.0(typescript@5.9.3)))(@valibot/to-json-schema@1.5.0(valibot@1.2.0(typescript@5.9.3)))(hono@4.12.5)(openapi-types@12.1.3)(valibot@1.2.0(typescript@5.9.3))(zod@3.24.1)
       js-yaml: 4.1.1
@@ -2562,7 +2642,6 @@ snapshots:
       - '@tidbcloud/serverless'
       - '@types/better-sqlite3'
       - '@types/node'
-      - '@types/pg'
       - '@types/sql.js'
       - '@upstash/redis'
       - '@vercel/postgres'
@@ -2585,14 +2664,15 @@ snapshots:
       - zod
       - zod-openapi
 
-  '@danylohotvianskyi/bobra-framework@0.1.3(@types/node@22.19.15)(@types/pg@8.18.0)(openapi-types@12.1.3)(typescript@5.9.3)(zod@3.24.1)':
+  '@danylohotvianskyi/bobra-framework@file:../framework(@types/node@22.19.15)(openapi-types@12.1.3)(typescript@5.9.3)(zod@3.24.1)':
     dependencies:
-      '@cloudflare/workers-types': 4.20260305.1
+      '@cloudflare/workers-types': 4.20260312.1
       '@hono/valibot-validator': 0.5.3(hono@4.12.5)(valibot@1.2.0(typescript@5.9.3))
+      '@types/pg': 8.18.0
       '@valibot/to-json-schema': 1.5.0(valibot@1.2.0(typescript@5.9.3))
       dotenv: 16.6.1
-      drizzle-orm: 0.44.7(@cloudflare/workers-types@4.20260305.1)(@types/pg@8.18.0)(pg@8.20.0)(postgres@3.4.8)
-      drizzle-valibot: 0.4.2(drizzle-orm@0.44.7(@cloudflare/workers-types@4.20260305.1)(@types/pg@8.18.0)(pg@8.20.0)(postgres@3.4.8))(valibot@1.2.0(typescript@5.9.3))
+      drizzle-orm: 0.44.7(@cloudflare/workers-types@4.20260312.1)(@types/pg@8.18.0)(pg@8.20.0)(postgres@3.4.8)
+      drizzle-valibot: 0.4.2(drizzle-orm@0.44.7(@cloudflare/workers-types@4.20260312.1)(@types/pg@8.18.0)(pg@8.20.0)(postgres@3.4.8))(valibot@1.2.0(typescript@5.9.3))
       hono: 4.12.5
       hono-openapi: 0.4.8(@hono/valibot-validator@0.5.3(hono@4.12.5)(valibot@1.2.0(typescript@5.9.3)))(@valibot/to-json-schema@1.5.0(valibot@1.2.0(typescript@5.9.3)))(hono@4.12.5)(openapi-types@12.1.3)(valibot@1.2.0(typescript@5.9.3))(zod@3.24.1)
       js-yaml: 4.1.1
@@ -2620,7 +2700,6 @@ snapshots:
       - '@tidbcloud/serverless'
       - '@types/better-sqlite3'
       - '@types/node'
-      - '@types/pg'
       - '@types/sql.js'
       - '@upstash/redis'
       - '@vercel/postgres'
@@ -3432,7 +3511,7 @@ snapshots:
 
   '@types/pg@8.18.0':
     dependencies:
-      '@types/node': 20.19.37
+      '@types/node': 22.19.15
       pg-protocol: 1.13.0
       pg-types: 2.2.0
 
@@ -3680,16 +3759,16 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  drizzle-orm@0.44.7(@cloudflare/workers-types@4.20260305.1)(@types/pg@8.18.0)(pg@8.20.0)(postgres@3.4.8):
+  drizzle-orm@0.44.7(@cloudflare/workers-types@4.20260312.1)(@types/pg@8.18.0)(pg@8.20.0)(postgres@3.4.8):
     optionalDependencies:
-      '@cloudflare/workers-types': 4.20260305.1
+      '@cloudflare/workers-types': 4.20260312.1
       '@types/pg': 8.18.0
       pg: 8.20.0
       postgres: 3.4.8
 
-  drizzle-valibot@0.4.2(drizzle-orm@0.44.7(@cloudflare/workers-types@4.20260305.1)(@types/pg@8.18.0)(pg@8.20.0)(postgres@3.4.8))(valibot@1.2.0(typescript@5.9.3)):
+  drizzle-valibot@0.4.2(drizzle-orm@0.44.7(@cloudflare/workers-types@4.20260312.1)(@types/pg@8.18.0)(pg@8.20.0)(postgres@3.4.8))(valibot@1.2.0(typescript@5.9.3)):
     dependencies:
-      drizzle-orm: 0.44.7(@cloudflare/workers-types@4.20260305.1)(@types/pg@8.18.0)(pg@8.20.0)(postgres@3.4.8)
+      drizzle-orm: 0.44.7(@cloudflare/workers-types@4.20260312.1)(@types/pg@8.18.0)(pg@8.20.0)(postgres@3.4.8)
       valibot: 1.2.0(typescript@5.9.3)
 
   emoji-regex@8.0.0: {}
@@ -4899,7 +4978,7 @@ snapshots:
       '@cloudflare/workerd-linux-arm64': 1.20260301.1
       '@cloudflare/workerd-windows-64': 1.20260301.1
 
-  wrangler@4.71.0(@cloudflare/workers-types@4.20260305.1):
+  wrangler@4.71.0(@cloudflare/workers-types@4.20260312.1):
     dependencies:
       '@cloudflare/kv-asset-handler': 0.4.2
       '@cloudflare/unenv-preset': 2.15.0(unenv@2.0.0-rc.24)(workerd@1.20260301.1)
@@ -4910,7 +4989,7 @@ snapshots:
       unenv: 2.0.0-rc.24
       workerd: 1.20260301.1
     optionalDependencies:
-      '@cloudflare/workers-types': 4.20260305.1
+      '@cloudflare/workers-types': 4.20260312.1
       fsevents: 2.3.3
     transitivePeerDependencies:
       - bufferutil

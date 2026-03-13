@@ -2,7 +2,7 @@ import { TokenMetadataUpdateClient, updateTokenLastUsed } from './token-metadata
 import { hashToken, findTokenByHash } from './hash';
 
 export interface TokenRecord {
-  id: string;
+  uid: string;
   tokenHash: string;
   tokenSalt: string;
   expiresAt: Date;
@@ -18,7 +18,7 @@ export interface TokenValidationResult {
   valid: boolean;
   reason?: string;
   tokenInfo?: {
-    id: string;
+    uid: string;
     expiresAt: Date;
     lastUsedAt?: Date;
     ipAddresses?: string[];
@@ -32,8 +32,7 @@ export async function validateToken(
   provider: TokenValidationProvider
 ): Promise<TokenValidationResult> {
   try {
-    const useSqlite = !!(provider as any).useSqlite;
-    const tokenRecord = await findTokenByHash(provider.db, token, provider.schema, useSqlite);
+    const tokenRecord = await findTokenByHash(provider.ctx, token, provider.schema);
 
     if (!tokenRecord) {
       return {
@@ -62,12 +61,12 @@ export async function validateToken(
     const isValid = computedHash === tokenRecord.tokenHash;
 
     if (isValid) {
-      await updateTokenLastUsed(provider, tokenRecord.id);
+      await updateTokenLastUsed(provider, tokenRecord.uid);
       const isInit = tokenRecord.initToken === true || tokenRecord.initToken === 1;
       return {
         valid: true,
         tokenInfo: {
-          id: tokenRecord.id,
+          uid: tokenRecord.uid,
           expiresAt: tokenRecord.expiresAt,
           lastUsedAt: tokenRecord.lastUsedAt,
           ipAddresses: tokenRecord.ipAddresses,

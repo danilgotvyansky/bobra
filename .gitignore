@@ -86,7 +86,7 @@ web_modules/
 
 # Output of 'npm pack'
 
-\*.tgz
+*.tgz
 
 # Yarn Integrity file
 
@@ -173,7 +173,6 @@ dist
 
 postgres-data/
 git_diff.txt
-*.sync-conflict*
 
 .config/
 
@@ -181,5 +180,7 @@ git_diff.txt
 wrangler.jsonc
 config.local.yml
 
-# tarballs
-*.tgz
+# Syncthing files
+*.syncthing.*
+*.sync-conflict*
+*.tmp

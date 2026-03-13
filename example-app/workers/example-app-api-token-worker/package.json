@@ -1,17 +1,15 @@
 {
-  "name": "@example-app/api-docs-handler",
+  "name": "@example-app/api-token-worker",
   "version": "0.1.0",
-  "description": "API Docs handler for example-app API documentation",
+  "description": "Worker for API tokens",
   "main": "src/index.ts",
   "scripts": {
     "build": "tsc",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@hono/swagger-ui": "^0.5.2",
+    "@example-app/api-token-handler": "workspace:*",
     "hono": "catalog:",
-    "@scalar/hono-api-reference": "^0.9.18",
-    "@scalar/openapi-to-markdown": "^0.2.37",
     "@danylohotvianskyi/bobra-framework": "catalog:"
   },
   "devDependencies": {

@@ -11,6 +11,7 @@ import {
   jsonb,
   index as pgIndex,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 
 export const tokens = pgTable('tokens', {
   uid: varchar('uid', { length: 36 }).primaryKey(),
@@ -18,7 +19,7 @@ export const tokens = pgTable('tokens', {
   tokenHash: varchar('token_hash', { length: 128 }).notNull(),
   tokenSalt: varchar('token_salt', { length: 64 }).notNull(),
   ipAddresses: jsonb('ip_addresses'),
-  expiresAt: timestamp('expires_at').notNull(),
+  expiresAt: timestamp('expires_at').notNull().default(sql`CURRENT_TIMESTAMP + INTERVAL '90 days'` as any),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   lastUsedAt: timestamp('last_used_at'),
   initToken: pgBoolean('init_token').notNull().default(false)
@@ -32,8 +33,8 @@ export const tokensSqlite = sqliteTable('tokens', {
   tokenHash: text('token_hash').notNull(),
   tokenSalt: text('token_salt').notNull(),
   ipAddresses: text('ip_addresses').$type<string | null>(),
-  expiresAt: text('expires_at').notNull(),
-  createdAt: text('created_at').notNull(),
+  expiresAt: text('expires_at').notNull().default(sql`(datetime('now', '+90 days'))` as any),
+  createdAt: text('created_at').notNull().default(sql`(CURRENT_TIMESTAMP)` as any),
   lastUsedAt: text('last_used_at').$type<string | null>(),
   initToken: integer('init_token').notNull().default(0)
 });
@@ -47,7 +48,7 @@ export const initTokenCreated = pgTable('init_token_created', {
 export const initTokenCreatedSqlite = sqliteTable('init_token_created', {
   id: text('id').primaryKey(),
   created: integer('created').notNull().default(0),
-  createdAt: text('created_at').notNull()
+  createdAt: text('created_at').notNull().default(sql`(CURRENT_TIMESTAMP)` as any)
 });
 
 export type Tokens = typeof tokens.$inferSelect | typeof tokensSqlite.$inferSelect;
