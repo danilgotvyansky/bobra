@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "4f4ddddd-a412-4e70-ad45-30af73473aff",
+  "id": "c97bd27a-0219-4b57-bfcd-0b17a385d3f1",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "init_token_created": {
@@ -27,7 +27,8 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false
+          "autoincrement": false,
+          "default": "(CURRENT_TIMESTAMP)"
         }
       },
       "indexes": {},
@@ -79,14 +80,16 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false
+          "autoincrement": false,
+          "default": "(datetime('now', '+90 days'))"
         },
         "created_at": {
           "name": "created_at",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false
+          "autoincrement": false,
+          "default": "(CURRENT_TIMESTAMP)"
         },
         "last_used_at": {
           "name": "last_used_at",

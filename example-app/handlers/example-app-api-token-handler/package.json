@@ -1,0 +1,24 @@
+{
+  "name": "@example-app/api-token-handler",
+  "version": "0.1.0",
+  "description": "API Token handler for example-app",
+  "main": "src/index.ts",
+  "scripts": {
+    "build": "tsc",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@danylohotvianskyi/bobra-framework": "catalog:",
+    "drizzle-orm": "^0.44.3",
+    "drizzle-valibot": "^0.4.2",
+    "hono": "catalog:",
+    "hono-openapi": "catalog:",
+    "@hono/valibot-validator": "catalog:",
+    "valibot": "catalog:",
+    "@valibot/to-json-schema": "catalog:"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "catalog:",
+    "typescript": "^5.6.0"
+  }
+}

@@ -5,14 +5,15 @@
   "main": "src/index.ts",
   "scripts": {
     "build": "tsc",
-    "migrate": "ts-node src/db/migrate.ts",
+    "migrate": "tsx src/db/migrate.ts",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@cloudflare/workers-types": "^4.20240925.0",
+    "@cloudflare/workers-types": "catalog:",
     "dotenv": "^16.4.1",
     "drizzle-orm": "^0.44.3",
     "drizzle-valibot": "^0.4.2",
+    "valibot": "catalog:",
     "pg": "^8.16.3",
     "postgres": "^3.2.0",
     "ts-node": "^10.9.2",

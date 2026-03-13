@@ -1,3 +1,4 @@
+export * as schema from './schema';
 import {
   getDb as _getDb,
   getDatabaseContext as _getDatabaseContext,
@@ -32,12 +33,12 @@ const customPgEdgeRouter: PgEdgeRouter = (locations: string[], cfContinentStr?: 
 };
 
 // Pre-bind token schema so existing getDb(env) calls don't need changes
-export function getDb(env: AppEnvBindings) {
+export function getDb(env: AppEnvBindings): DrizzleD1Client | DrizzlePgClient {
   // Pass the custom router via options
   return _getDb(env, schema, { pgEdgeRouter: customPgEdgeRouter });
 }
 
-export function getDatabaseContext(env: AppEnvBindings) {
+export function getDatabaseContext(env: AppEnvBindings): DatabaseContext {
   // Pass the custom router via options
   return _getDatabaseContext(env, schema, { pgEdgeRouter: customPgEdgeRouter });
 }
