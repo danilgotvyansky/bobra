@@ -135,6 +135,7 @@ export function generateWranglerConfig(config: AppConfig, workerType: string, wo
       compatibility_flags: ["nodejs_compat"],
       vars: {
         CONFIG_CONTENT: configContent,
+        WORKER_NAME: routerConfig?.name || "example-app-router-worker",
         DB_ENGINE: config.db_engine,
         PGEDGE_ENABLED: config.pgEdge?.enabled ?? false,
         PGEDGE_LOCATIONS: JSON.stringify(config.pgEdge?.locations || []),
@@ -244,6 +245,7 @@ export function generateWranglerConfig(config: AppConfig, workerType: string, wo
       compatibility_flags: ["nodejs_compat"],
       vars: {
         CONFIG_CONTENT: configContent,
+        WORKER_NAME: workerName,
         DB_ENGINE: getWorkerDbEngine(config, workerName),
         PGEDGE_ENABLED: config.pgEdge?.enabled ?? false,
         PGEDGE_LOCATIONS: JSON.stringify(config.pgEdge?.locations || []),
