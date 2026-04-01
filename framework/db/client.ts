@@ -126,15 +126,17 @@ export function getDb<S extends DrizzleSchema>(
     || (env as any).__cfContinent  // allow explicit override
     || undefined;
 
-  logger.debug('[getDb] Starting DB resolution', {
-    dbEngine,
-    hasPOSTGRES: !!env.POSTGRES?.connectionString,
-    hasD1: !!env.D1,
-    PGEDGE_ENABLED: env.PGEDGE_ENABLED,
-    PGEDGE_LOCATIONS: env.PGEDGE_LOCATIONS,
-    cfContinent: continent,
-    cfColo: cfInfo?.colo,
-  });
+  if (env.PGEDGE_DEBUG_LOGGING) {
+    logger.debug('[getDb] Starting DB resolution', {
+      dbEngine,
+      hasPOSTGRES: !!env.POSTGRES?.connectionString,
+      hasD1: !!env.D1,
+      PGEDGE_ENABLED: env.PGEDGE_ENABLED,
+      PGEDGE_LOCATIONS: env.PGEDGE_LOCATIONS,
+      cfContinent: continent,
+      cfColo: cfInfo?.colo,
+    });
+  }
 
   if (dbEngine === 'postgres' || (dbEngine === 'auto-detect' && hasPostgresBindings(env))) {
     const locations = getPgEdgeLocations(env);
@@ -160,7 +162,9 @@ export function getDb<S extends DrizzleSchema>(
 
       // Use the closest location's Hyperdrive connection directly
       if (connectionStrings.length > 0) {
-        logger.debug('[getDb] Using closest pgEdge location', { targetLocation });
+        if (env.PGEDGE_DEBUG_LOGGING) {
+          logger.debug('[getDb] Using closest pgEdge location', { targetLocation });
+        }
         return createPgDrizzleClient(connectionStrings[0]!, schema);
       } else {
         logger.warn('[getDb] pgEdge enabled but no connection strings found from bindings', { orderedLocations });
@@ -168,14 +172,18 @@ export function getDb<S extends DrizzleSchema>(
     }
 
     if (env.POSTGRES?.connectionString) {
-      logger.debug('[getDb] Using single POSTGRES binding');
+      if (env.PGEDGE_DEBUG_LOGGING) {
+        logger.debug('[getDb] Using single POSTGRES binding');
+      }
       return createPgDrizzleClient(env.POSTGRES.connectionString, schema);
     }
 
     // Look for any binding if locations were exactly 1
     if (locations.length === 1) {
       const bindingName = `POSTGRES_${locations[0]!.toUpperCase()}`;
-      logger.debug('[getDb] Single pgEdge location', { bindingName, hasBinding: !!env[bindingName]?.connectionString });
+      if (env.PGEDGE_DEBUG_LOGGING) {
+        logger.debug('[getDb] Single pgEdge location', { bindingName, hasBinding: !!env[bindingName]?.connectionString });
+      }
       if (env[bindingName]?.connectionString) {
         return createPgDrizzleClient(env[bindingName].connectionString, schema);
       }

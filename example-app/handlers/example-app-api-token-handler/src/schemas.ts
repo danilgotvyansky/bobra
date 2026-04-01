@@ -9,7 +9,7 @@ import * as v from 'valibot';
 import type { ObjectSchema, IntersectSchema, InferOutput, InferInput } from 'valibot';
 import { toJsonSchemaDefs } from '@valibot/to-json-schema';
 import { apiTokenSchema } from '../../../shared-utils/src/openapi';
-import { simpleSuccessResponseSchema, errorResponseJsonSchema } from '@danylohotvianskyi/bobra-framework/batteries/openapi';
+import { simpleSuccessResponseSchema, errorResponseSchema } from '@danylohotvianskyi/bobra-framework/batteries/openapi';
 
 export const tokenUidParamsSchema = v.object({
   tokenUid: v.string(),
@@ -44,7 +44,7 @@ export const componentSchemas = toJsonSchemaDefs({
 
   // Default responses
   SimpleSuccessResponse: simpleSuccessResponseSchema,
-  ErrorResponse: errorResponseJsonSchema,
+  ErrorResponse: errorResponseSchema,
 }, {
   typeMode: 'output',
   overrideRef: (context) => `#/components/schemas/${context.referenceId}`

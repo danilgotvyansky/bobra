@@ -48,9 +48,9 @@ export function generateResponseSchema(itemSchemaName: string) {
 export const errorResponseJsonSchema: any = {
   type: 'object',
   properties: {
-    success: { type: 'boolean' },
-    error: { type: 'string' },
-    details: { type: 'object', additionalProperties: true },
+    success: { type: 'boolean', example: false },
+    error: { type: 'string', example: 'Details about the error' },
+    details: { type: 'object', additionalProperties: true, example: {} },
   },
 };
 
@@ -76,6 +76,12 @@ export const dateToStringSchema = v.pipe(
 export const simpleSuccessResponseSchema = v.object({
   success: v.literal(true),
   message: v.string(),
+});
+
+export const errorResponseSchema = v.object({
+  success: v.literal(false),
+  error: v.pipe(v.string(), v.description('Error message')),
+  details: v.optional(v.record(v.string(), v.any())),
 });
 
 /**
