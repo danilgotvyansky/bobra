@@ -1,15 +1,17 @@
 import type { TokenValidationProvider } from '../batteries/auth/token-validation';
 import { validateToken, extractAuthToken } from '../batteries/auth/token-validation';
+import { Context } from 'hono';
+import type { RouterEnv } from '../network/router';
 
 export interface EnsureApiTokenOptions {
-  getTokenValidationProvider: (c: any) => TokenValidationProvider;
-  getOrgContext?: (c: any) => Promise<string | null> | string | null;
-  verifyTokenScope?: (env: any, orgContext: string, tokenUid: string) => Promise<boolean>;
+  getTokenValidationProvider: (c: Context<{ Bindings: RouterEnv; Variables: { _apiTokenFromQuery?: string; apiToken?: unknown } }>) => TokenValidationProvider;
+  getOrgContext?: (c: Context<{ Bindings: RouterEnv; Variables: { _apiTokenFromQuery?: string; apiToken?: unknown } }>) => Promise<string | null> | string | null;
+  verifyTokenScope?: (env: RouterEnv, orgContext: string, tokenUid: string) => Promise<boolean>;
 }
 
 export function ensureApiToken(options: EnsureApiTokenOptions) {
-  return async (c: any, next: any) => {
-    const env = c.env as any;
+  return async (c: Context<{ Bindings: RouterEnv; Variables: { _apiTokenFromQuery?: string; apiToken?: unknown } }>, next: () => Promise<void>) => {
+    const env = c.env;
 
     let rawToken = extractAuthToken(c.req.raw as Request);
 
@@ -39,7 +41,7 @@ export function ensureApiToken(options: EnsureApiTokenOptions) {
           return c.json({ valid: false, reason: 'Organization context required' }, 400);
         }
 
-        const isLinked = await options.verifyTokenScope(env, orgContext as string, result.tokenInfo.uid);
+        const isLinked = await options.verifyTokenScope(env, orgContext, result.tokenInfo.uid);
         if (!isLinked) {
           return c.json({ valid: false, reason: 'Token is not linked to this organization' }, 403);
         }

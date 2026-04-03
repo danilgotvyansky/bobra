@@ -102,6 +102,7 @@ export interface WorkerOptions {
 export interface WorkerEnv {
   CONFIG_CONTENT?: string;
   WORKER_NAME?: string;
+  // Dynamic service bindings - any is necessary here because bindings are determined at runtime
   [key: string]: any;
 }
 

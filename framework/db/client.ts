@@ -13,7 +13,7 @@ export interface AppEnvBindings {
   DEPLOYMENT_CONTEXT?: 'cloudflare' | 'self-hosted';
   PGEDGE_ENABLED?: boolean | string;
   PGEDGE_LOCATIONS?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 type DrizzleSchema = Record<string, unknown>;
@@ -29,10 +29,20 @@ export interface DatabaseContext<S extends DrizzleSchema = DrizzleSchema> {
   db: DrizzleD1Client<S> | DrizzlePgClient<S>;
 }
 
-export type PgEdgeRouter = (locations: string[], cfContinentStr?: string, cfInfo?: any) => string;
+export interface CfInfo {
+  continent?: string;
+  colo?: string;
+  [key: string]: unknown;
+}
+
+export interface PostgresBinding {
+  connectionString: string;
+}
+
+export type PgEdgeRouter = (locations: string[], cfContinentStr?: string, cfInfo?: CfInfo) => string;
 
 export interface DbContextOptions {
-  cfInfo?: any;
+  cfInfo?: CfInfo;
   pgEdgeRouter?: PgEdgeRouter;
 }
 
@@ -42,7 +52,7 @@ export interface DbContextOptions {
 export function getDatabaseContext<S extends DrizzleSchema>(
   env: AppEnvBindings,
   schema: S,
-  optionsOrCfInfo?: any | DbContextOptions
+  optionsOrCfInfo?: CfInfo | DbContextOptions
 ): DatabaseContext<S> {
   const options = getNormalizedDbContextOptions(optionsOrCfInfo);
   const dbEngine = env.DB_ENGINE || 'auto-detect';
@@ -70,12 +80,12 @@ export function getDatabaseContext<S extends DrizzleSchema>(
 /**
  * cfInfo for backward compatibility
  */
-export function getNormalizedDbContextOptions(optionsOrCfInfo?: any): DbContextOptions {
+export function getNormalizedDbContextOptions(optionsOrCfInfo?: CfInfo | DbContextOptions): DbContextOptions {
   if (!optionsOrCfInfo) return {};
-  if (typeof optionsOrCfInfo === 'object' && ('pgEdgeRouter' in optionsOrCfInfo || 'cfInfo' in optionsOrCfInfo || Object.keys(optionsOrCfInfo).length === 0)) {
+  if ('pgEdgeRouter' in optionsOrCfInfo || 'cfInfo' in optionsOrCfInfo) {
     return optionsOrCfInfo as DbContextOptions;
   }
-  return { cfInfo: optionsOrCfInfo };
+  return { cfInfo: optionsOrCfInfo as CfInfo };
 }
 
 /**
@@ -111,7 +121,7 @@ export const defaultPgEdgeRouter: PgEdgeRouter = (locations: string[], cfContine
 export function getDb<S extends DrizzleSchema>(
   env: AppEnvBindings,
   schema: S,
-  optionsOrCfInfo?: any | DbContextOptions
+  optionsOrCfInfo?: CfInfo | DbContextOptions
 ): DrizzleD1Client<S> | DrizzlePgClient<S> {
   const options = getNormalizedDbContextOptions(optionsOrCfInfo);
   const cfInfo = options.cfInfo;
@@ -122,9 +132,7 @@ export function getDb<S extends DrizzleSchema>(
   const logger = getLogger();
 
   // Resolve continent: prefer direct cf object, fall back to router-forwarded header
-  const continent = cfInfo?.continent
-    || (env as any).__cfContinent  // allow explicit override
-    || undefined;
+  const continent = cfInfo?.continent ?? (env as any).__cfContinent ?? undefined;
 
   if (env.PGEDGE_DEBUG_LOGGING) {
     logger.debug('[getDb] Starting DB resolution', {
@@ -154,7 +162,7 @@ export function getDb<S extends DrizzleSchema>(
       const connectionStrings: string[] = [];
       for (const loc of orderedLocations) {
         const bindingName = `POSTGRES_${loc.toUpperCase()}`;
-        const binding = env[bindingName];
+        const binding = env[bindingName] as unknown as PostgresBinding | undefined;
         if (binding?.connectionString) {
           connectionStrings.push(binding.connectionString);
         }
@@ -182,10 +190,10 @@ export function getDb<S extends DrizzleSchema>(
     if (locations.length === 1) {
       const bindingName = `POSTGRES_${locations[0]!.toUpperCase()}`;
       if (env.PGEDGE_DEBUG_LOGGING) {
-        logger.debug('[getDb] Single pgEdge location', { bindingName, hasBinding: !!env[bindingName]?.connectionString });
+        logger.debug('[getDb] Single pgEdge location', { bindingName, hasBinding: !!(env[bindingName] as unknown as PostgresBinding | undefined)?.connectionString });
       }
-      if (env[bindingName]?.connectionString) {
-        return createPgDrizzleClient(env[bindingName].connectionString, schema);
+      if ((env[bindingName] as unknown as PostgresBinding | undefined)?.connectionString) {
+        return createPgDrizzleClient((env[bindingName] as unknown as PostgresBinding).connectionString, schema);
       }
     }
 
@@ -250,7 +258,7 @@ export function hasPostgresBindings(env: AppEnvBindings): boolean {
 
   const locations = getPgEdgeLocations(env);
   if (locations.length > 0) {
-    return locations.some(loc => env[`POSTGRES_${loc.toUpperCase()}`]?.connectionString);
+    return locations.some(loc => (env[`POSTGRES_${loc.toUpperCase()}`] as unknown as PostgresBinding | undefined)?.connectionString);
   }
   return false;
 }

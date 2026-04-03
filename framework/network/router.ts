@@ -1,6 +1,7 @@
-import { Hono } from 'hono';
+import { Hono, Context } from 'hono';
 import { cors } from 'hono/cors';
 import type { AppConfig, RouteConfig } from '../core/config';
+import type { ExecutionContext } from '@cloudflare/workers-types';
 import {
   getRouterBasePath,
   getWorkerBasePath,
@@ -13,7 +14,8 @@ import { simpleHonoLogger } from '../logging/logging-middleware';
 
 export interface RouterEnv {
   CONFIG_CONTENT?: string;
-  [key: string]: any;
+  // Dynamic service bindings - unknown is necessary here because bindings are determined at runtime
+  [key: string]: unknown;
 }
 
 export function getServicesFromRoutes(routes: RouteConfig[]): string[] {
@@ -33,7 +35,7 @@ export function findMatchingRoute(path: string, routes: RouteConfig[]): RouteCon
   return null;
 }
 
-export function getServiceBinding(serviceName: string, env: RouterEnv): any {
+export function getServiceBinding(serviceName: string, env: RouterEnv): unknown {
   const bindingName = serviceToBindingName(serviceName);
   const binding = env[bindingName];
 
@@ -50,7 +52,7 @@ export function getServiceBinding(serviceName: string, env: RouterEnv): any {
  * `workerName` is injected into `X-Forwarded-By` for tracing.
  */
 export async function handleServiceProxy(
-  c: any,
+  c: Context<{ Bindings: RouterEnv }>,
   config: AppConfig,
   serviceName: string,
   remainingPath: string,
@@ -64,13 +66,13 @@ export async function handleServiceProxy(
     }, 404);
   }
 
-  const serviceConfig = config.router.services.find((s: any) => s.service === serviceName);
+  const serviceConfig = config.router.services.find((s: { service: string }) => s.service === serviceName);
   if (!serviceConfig) {
     return c.json({
       success: false,
       error: 'Service not found in router configuration',
       service: serviceName,
-      available_services: config.router.services.map((s: any) => s.service)
+      available_services: config.router.services.map((s: { service: string }) => s.service)
     }, 404);
   }
 
@@ -89,7 +91,7 @@ export async function handleServiceProxy(
       newHeaders.set('X-Forwarded-By', workerName);
       newHeaders.set('X-Original-Path', c.req.path);
       // Forward CF location data for pgEdge geo-routing
-      const cf = (c.req.raw as any).cf;
+      const cf = (c.req.raw as Request & { cf?: { continent?: string; colo?: string } }).cf;
       if (cf?.continent) newHeaders.set('X-CF-Continent', cf.continent);
       if (cf?.colo) newHeaders.set('X-CF-Colo', cf.colo);
 
@@ -127,7 +129,7 @@ export async function handleServiceProxy(
         body: c.req.method !== 'GET' && c.req.method !== 'HEAD' ? await c.req.text() : undefined
       });
 
-      response = await serviceBinding.fetch(newRequest);
+      response = await (serviceBinding as { fetch: (req: Request) => Promise<Response> }).fetch(newRequest);
     }
 
     return response;
@@ -154,7 +156,7 @@ export interface CreateRouterAppOptions {
    * Optional hook to build the public config response object.
    * If omitted, a default response with router basePath + workers is returned.
    */
-  buildPublicConfig?: (config: AppConfig, env: RouterEnv) => Record<string, any>;
+  buildPublicConfig?: (config: AppConfig, env: RouterEnv) => Record<string, unknown>;
 }
 
 /**
@@ -345,7 +347,7 @@ export function createRouterApp(
       const newHeaders = new Headers(c.req.raw.headers);
       newHeaders.set('X-Forwarded-Url', c.req.url);
       // Forward CF location data for pgEdge geo-routing
-      const cf = (c.req.raw as any).cf;
+      const cf = (c.req.raw as Request & { cf?: { continent?: string; colo?: string } }).cf;
       if (cf?.continent) newHeaders.set('X-CF-Continent', cf.continent);
       if (cf?.colo) newHeaders.set('X-CF-Colo', cf.colo);
       const orgUid = c.req.query('org_uid');
@@ -359,7 +361,7 @@ export function createRouterApp(
         body: c.req.method !== 'GET' && c.req.method !== 'HEAD' ? await c.req.text() : undefined
       });
 
-      const response = await service.fetch(newRequest);
+      const response = await (service as { fetch: (req: Request) => Promise<Response> }).fetch(newRequest);
       return response;
 
     } catch (error) {
@@ -381,7 +383,7 @@ export function createRouterApp(
  */
 export function createRouterWorker(options: CreateRouterAppOptions) {
   return {
-    async fetch(request: Request, env: RouterEnv, ctx: any): Promise<Response> {
+    async fetch(request: Request, env: RouterEnv, ctx: ExecutionContext): Promise<Response> {
       try {
         const config = await loadConfig(env);
 
