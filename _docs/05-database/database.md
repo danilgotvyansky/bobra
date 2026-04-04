@@ -96,6 +96,62 @@ When using PostgreSQL with [pgEdge](https://www.pgedge.com/), Bobra can automati
 ### Location Decisions
 The `getDb(env)` utility uses Cloudflare's `cfInfo` (colo and continent) to determine the nearest database instance.
 
+### Role-Aware Binding Selection
+
+Bobra supports selecting a Postgres binding role per query path, while keeping location routing.
+
+Example for read-after-write-sensitive operations:
+
+```typescript
+const db = getDb(env, schema, { postgresBindingRole: 'live' });
+```
+
+When `pgEdge.locations` includes `eu`, Bobra resolves candidates in this order:
+1. `POSTGRES_EU_<ROLE>` (for example `POSTGRES_EU_LIVE`)
+2. `POSTGRES_EU`
+3. `POSTGRES_EU_DEFAULT`
+
+In single-postgres mode (no pgEdge locations), candidates are:
+1. `POSTGRES_<ROLE>` (for example `POSTGRES_LIVE`)
+2. `POSTGRES`
+3. `POSTGRES_DEFAULT`
+
+This allows separate Hyperdrive configs (for example cached vs non-cached) without introducing artificial locations or SQL cache-bypass clauses.
+
+Using a separate non-cached Hyperdrive is explicitly recommended by Cloudflare in [Query caching](https://developers.cloudflare.com/hyperdrive/concepts/query-caching/)
+
+### Config Shapes
+
+`database.postgres` supports all of the following:
+
+```yaml
+# Single binding
+postgres:
+  binding: "POSTGRES"
+  id: "..."
+
+# Per-location
+postgres:
+  eu:
+    binding: "POSTGRES_EU"
+    id: "..."
+  us:
+    binding: "POSTGRES_US"
+    id: "..."
+
+# Per-location with roles
+postgres:
+  eu:
+    default:
+      binding: "POSTGRES_EU"
+      id: "..."
+    live:
+      binding: "POSTGRES_EU_LIVE"
+      id: "..."
+```
+
+You can also utilize role logic for creating reader/writer db role splits in your application.
+
 ### Customization
 You can customize the routing logic in your database client implementation:
 - **Global Config**: Define `pgEdge.locations` in `config.yml`.
