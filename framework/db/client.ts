@@ -30,10 +30,71 @@ export interface DatabaseContext<S extends DrizzleSchema = DrizzleSchema> {
 }
 
 export type PgEdgeRouter = (locations: string[], cfContinentStr?: string, cfInfo?: any) => string;
+export type PostgresBindingRole = string;
 
 export interface DbContextOptions {
   cfInfo?: any;
   pgEdgeRouter?: PgEdgeRouter;
+  postgresBindingRole?: PostgresBindingRole;
+}
+
+interface ResolvedPostgresBinding {
+  bindingName: string;
+  connectionString: string;
+}
+
+function normalizePostgresBindingRole(role?: PostgresBindingRole): string | undefined {
+  const trimmedRole = role?.trim();
+  if (!trimmedRole) return undefined;
+
+  const normalizedRole = trimmedRole.toUpperCase().replace(/[^A-Z0-9_]/g, '_');
+  if (!normalizedRole || normalizedRole === 'DEFAULT') return undefined;
+  return normalizedRole;
+}
+
+function getPostgresLocationBindingCandidates(location: string, role?: PostgresBindingRole): string[] {
+  const normalizedLocation = location.toUpperCase();
+  const normalizedRole = normalizePostgresBindingRole(role);
+
+  if (!normalizedRole) {
+    return [
+      `POSTGRES_${normalizedLocation}`,
+      `POSTGRES_${normalizedLocation}_DEFAULT`,
+    ];
+  }
+
+  return [
+    `POSTGRES_${normalizedLocation}_${normalizedRole}`,
+    `POSTGRES_${normalizedLocation}`,
+    `POSTGRES_${normalizedLocation}_DEFAULT`,
+  ];
+}
+
+function getSinglePostgresBindingCandidates(role?: PostgresBindingRole): string[] {
+  const normalizedRole = normalizePostgresBindingRole(role);
+
+  if (!normalizedRole) {
+    return ['POSTGRES', 'POSTGRES_DEFAULT'];
+  }
+
+  return [`POSTGRES_${normalizedRole}`, 'POSTGRES', 'POSTGRES_DEFAULT'];
+}
+
+function resolvePostgresBindingByCandidates(
+  env: AppEnvBindings,
+  candidateBindingNames: string[]
+): ResolvedPostgresBinding | undefined {
+  for (const bindingName of candidateBindingNames) {
+    const binding = env[bindingName];
+    if (binding?.connectionString && typeof binding.connectionString === 'string') {
+      return {
+        bindingName,
+        connectionString: binding.connectionString,
+      };
+    }
+  }
+
+  return undefined;
 }
 
 /**
@@ -47,7 +108,7 @@ export function getDatabaseContext<S extends DrizzleSchema>(
   const options = getNormalizedDbContextOptions(optionsOrCfInfo);
   const dbEngine = env.DB_ENGINE || 'auto-detect';
 
-  if (dbEngine === 'postgres' && hasPostgresBindings(env)) {
+  if (dbEngine === 'postgres' && hasPostgresBindings(env, options.postgresBindingRole)) {
     return { type: 'postgres', db: getDb(env, schema, options) };
   }
 
@@ -56,7 +117,7 @@ export function getDatabaseContext<S extends DrizzleSchema>(
   }
 
   // Auto-detect fallback
-  if (hasPostgresBindings(env)) {
+  if (hasPostgresBindings(env, options.postgresBindingRole)) {
     return { type: 'postgres', db: getDb(env, schema, options) };
   }
 
@@ -72,7 +133,14 @@ export function getDatabaseContext<S extends DrizzleSchema>(
  */
 export function getNormalizedDbContextOptions(optionsOrCfInfo?: any): DbContextOptions {
   if (!optionsOrCfInfo) return {};
-  if (typeof optionsOrCfInfo === 'object' && ('pgEdgeRouter' in optionsOrCfInfo || 'cfInfo' in optionsOrCfInfo || Object.keys(optionsOrCfInfo).length === 0)) {
+  if (
+    typeof optionsOrCfInfo === 'object' && (
+      'pgEdgeRouter' in optionsOrCfInfo
+      || 'cfInfo' in optionsOrCfInfo
+      || 'postgresBindingRole' in optionsOrCfInfo
+      || Object.keys(optionsOrCfInfo).length === 0
+    )
+  ) {
     return optionsOrCfInfo as DbContextOptions;
   }
   return { cfInfo: optionsOrCfInfo };
@@ -116,6 +184,8 @@ export function getDb<S extends DrizzleSchema>(
   const options = getNormalizedDbContextOptions(optionsOrCfInfo);
   const cfInfo = options.cfInfo;
   const pgEdgeRouter = options.pgEdgeRouter || defaultPgEdgeRouter;
+  const postgresBindingRole = options.postgresBindingRole;
+  const normalizedPostgresBindingRole = normalizePostgresBindingRole(postgresBindingRole);
 
   const dbEngine = env.DB_ENGINE || 'auto-detect';
 
@@ -133,6 +203,7 @@ export function getDb<S extends DrizzleSchema>(
       hasD1: !!env.D1,
       PGEDGE_ENABLED: env.PGEDGE_ENABLED,
       PGEDGE_LOCATIONS: env.PGEDGE_LOCATIONS,
+      postgresBindingRole: normalizedPostgresBindingRole || 'DEFAULT',
       cfContinent: continent,
       cfColo: cfInfo?.colo,
     });
@@ -141,60 +212,73 @@ export function getDb<S extends DrizzleSchema>(
   if (dbEngine === 'postgres' || (dbEngine === 'auto-detect' && hasPostgresBindings(env))) {
     const locations = getPgEdgeLocations(env);
 
-    if (locations.length > 1) {
-      const cfContinentStr = (continent || '').toUpperCase();
-      const targetLocation = pgEdgeRouter(locations, cfContinentStr, cfInfo);
+    if (locations.length > 0) {
+      let orderedLocations = [...locations];
+      let targetLocation: string | undefined;
 
-      // Order locations so target goes first
-      const orderedLocations = [
-        targetLocation,
-        ...locations.filter(loc => loc !== targetLocation)
-      ];
+      if (locations.length > 1) {
+        const cfContinentStr = (continent || '').toUpperCase();
+        targetLocation = pgEdgeRouter(locations, cfContinentStr, cfInfo);
 
-      const connectionStrings: string[] = [];
+        // Order locations so target goes first
+        orderedLocations = [
+          targetLocation,
+          ...locations.filter(loc => loc !== targetLocation)
+        ];
+      }
+
       for (const loc of orderedLocations) {
-        const bindingName = `POSTGRES_${loc.toUpperCase()}`;
-        const binding = env[bindingName];
-        if (binding?.connectionString) {
-          connectionStrings.push(binding.connectionString);
+        const resolved = resolvePostgresBindingByCandidates(
+          env,
+          getPostgresLocationBindingCandidates(loc, postgresBindingRole)
+        );
+
+        if (resolved) {
+          if (env.PGEDGE_DEBUG_LOGGING) {
+            logger.debug('[getDb] Using pgEdge binding', {
+              targetLocation,
+              selectedLocation: loc,
+              selectedBinding: resolved.bindingName,
+              postgresBindingRole: normalizedPostgresBindingRole || 'DEFAULT',
+            });
+          }
+
+          return createPgDrizzleClient(resolved.connectionString, schema);
         }
       }
 
-      // Use the closest location's Hyperdrive connection directly
-      if (connectionStrings.length > 0) {
-        if (env.PGEDGE_DEBUG_LOGGING) {
-          logger.debug('[getDb] Using closest pgEdge location', { targetLocation });
-        }
-        return createPgDrizzleClient(connectionStrings[0]!, schema);
-      } else {
-        logger.warn('[getDb] pgEdge enabled but no connection strings found from bindings', { orderedLocations });
-      }
+      logger.warn('[getDb] pgEdge enabled but no matching POSTGRES bindings found', {
+        orderedLocations,
+        postgresBindingRole: normalizedPostgresBindingRole || 'DEFAULT',
+      });
     }
 
-    if (env.POSTGRES?.connectionString) {
-      if (env.PGEDGE_DEBUG_LOGGING) {
-        logger.debug('[getDb] Using single POSTGRES binding');
-      }
-      return createPgDrizzleClient(env.POSTGRES.connectionString, schema);
-    }
+    const singleResolved = resolvePostgresBindingByCandidates(
+      env,
+      getSinglePostgresBindingCandidates(postgresBindingRole)
+    );
 
-    // Look for any binding if locations were exactly 1
-    if (locations.length === 1) {
-      const bindingName = `POSTGRES_${locations[0]!.toUpperCase()}`;
+    if (singleResolved) {
       if (env.PGEDGE_DEBUG_LOGGING) {
-        logger.debug('[getDb] Single pgEdge location', { bindingName, hasBinding: !!env[bindingName]?.connectionString });
+        logger.debug('[getDb] Using single POSTGRES binding', {
+          selectedBinding: singleResolved.bindingName,
+          postgresBindingRole: normalizedPostgresBindingRole || 'DEFAULT',
+        });
       }
-      if (env[bindingName]?.connectionString) {
-        return createPgDrizzleClient(env[bindingName].connectionString, schema);
-      }
+
+      return createPgDrizzleClient(singleResolved.connectionString, schema);
     }
 
     logger.error('[getDb] No POSTGRES binding found', undefined, {
       locationsCount: locations.length,
-      hasFallbackPOSTGRES: !!env.POSTGRES?.connectionString,
+      hasFallbackPOSTGRES: !!resolvePostgresBindingByCandidates(
+        env,
+        getSinglePostgresBindingCandidates(postgresBindingRole)
+      ),
+      postgresBindingRole: normalizedPostgresBindingRole || 'DEFAULT',
       envKeys: Object.keys(env).filter(k => k.startsWith('POSTGRES') || k.startsWith('PGEDGE') || k === 'DB_ENGINE'),
     });
-    throw new Error("POSTGRES binding with connectionString is required when DB_ENGINE is set to 'postgres'");
+    throw new Error("POSTGRES binding with connectionString is required when DB_ENGINE is set to 'postgres'. If using roles, ensure role-specific bindings exist or fallback POSTGRES bindings are configured.");
   }
 
   if (dbEngine === 'd1-sqlite' || (dbEngine === 'auto-detect' && env.D1)) {
@@ -245,12 +329,14 @@ export function getPgEdgeLocations(env: AppEnvBindings): string[] {
   return pgedgeLocations;
 }
 
-export function hasPostgresBindings(env: AppEnvBindings): boolean {
-  if (env.POSTGRES?.connectionString) return true;
+export function hasPostgresBindings(env: AppEnvBindings, role?: PostgresBindingRole): boolean {
+  if (resolvePostgresBindingByCandidates(env, getSinglePostgresBindingCandidates(role))) return true;
 
   const locations = getPgEdgeLocations(env);
   if (locations.length > 0) {
-    return locations.some(loc => env[`POSTGRES_${loc.toUpperCase()}`]?.connectionString);
+    return locations.some(loc =>
+      !!resolvePostgresBindingByCandidates(env, getPostgresLocationBindingCandidates(loc, role))
+    );
   }
   return false;
 }
