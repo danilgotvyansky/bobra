@@ -43,7 +43,7 @@ interface ResolvedPostgresBinding {
   connectionString: string;
 }
 
-function normalizePostgresBindingRole(role?: PostgresBindingRole): string | undefined {
+export function normalizePostgresBindingRole(role?: PostgresBindingRole): string | undefined {
   const trimmedRole = role?.trim();
   if (!trimmedRole) return undefined;
 
@@ -52,7 +52,7 @@ function normalizePostgresBindingRole(role?: PostgresBindingRole): string | unde
   return normalizedRole;
 }
 
-function getPostgresLocationBindingCandidates(location: string, role?: PostgresBindingRole): string[] {
+export function getPostgresLocationBindingCandidates(location: string, role?: PostgresBindingRole): string[] {
   const normalizedLocation = location.toUpperCase();
   const normalizedRole = normalizePostgresBindingRole(role);
 
@@ -68,6 +68,26 @@ function getPostgresLocationBindingCandidates(location: string, role?: PostgresB
     `POSTGRES_${normalizedLocation}`,
     `POSTGRES_${normalizedLocation}_DEFAULT`,
   ];
+}
+
+/**
+ * Get all available postgres bindings for a specific location
+ * This helps determine what bindings are actually available for fallback logic
+ */
+export function getAvailablePostgresBindingsForLocation(env: AppEnvBindings, location: string): string[] {
+  const normalizedLocation = location.toUpperCase();
+  const availableBindings: string[] = [];
+ 
+  // Add any binding that starts with POSTGRES_{LOCATION}
+  Object.keys(env).forEach(key => {
+    if (key.startsWith(`POSTGRES_${normalizedLocation}_`) || key === `POSTGRES_${normalizedLocation}`) {
+      if (env[key]?.connectionString && typeof env[key].connectionString === 'string') {
+        availableBindings.push(key);
+      }
+    }
+  });
+  
+  return availableBindings;
 }
 
 function getSinglePostgresBindingCandidates(role?: PostgresBindingRole): string[] {
@@ -228,10 +248,19 @@ export function getDb<S extends DrizzleSchema>(
       }
 
       for (const loc of orderedLocations) {
-        const resolved = resolvePostgresBindingByCandidates(
-          env,
-          getPostgresLocationBindingCandidates(loc, postgresBindingRole)
-        );
+        const candidates = getPostgresLocationBindingCandidates(loc, postgresBindingRole);
+        const resolved = resolvePostgresBindingByCandidates(env, candidates);
+
+        if (env.PGEDGE_DEBUG_LOGGING) {
+          logger.debug('[getDb] Checking location for pgEdge binding', {
+            targetLocation,
+            selectedLocation: loc,
+            candidates,
+            resolved: resolved?.bindingName || null,
+            postgresBindingRole: normalizedPostgresBindingRole || 'DEFAULT',
+            originalRole: postgresBindingRole,
+          });
+        }
 
         if (resolved) {
           if (env.PGEDGE_DEBUG_LOGGING) {
@@ -245,11 +274,74 @@ export function getDb<S extends DrizzleSchema>(
 
           return createPgDrizzleClient(resolved.connectionString, schema);
         }
+        
+        // If no binding found with the specified role, try fallback logic
+        // This should handle both cases: when a role is specified and when DEFAULT is used
+        const availableBindings = getAvailablePostgresBindingsForLocation(env, loc);
+        
+        if (env.PGEDGE_DEBUG_LOGGING) {
+          logger.debug('[getDb] Checking fallback logic', {
+            selectedLocation: loc,
+            normalizedPostgresBindingRole,
+            originalRole: postgresBindingRole,
+            availableBindings,
+            hasAvailableBindings: availableBindings.length > 0,
+          });
+        }
+        
+        if (availableBindings.length > 0) {
+          // If there are available bindings, try to use them
+          let preferredBindings = availableBindings;
+          
+          if (!normalizedPostgresBindingRole) {
+            // When DEFAULT is requested (normalized to undefined), prefer LIVE bindings
+            const liveBindings = availableBindings.filter(binding =>
+              binding.endsWith('_LIVE')
+            );
+            if (liveBindings.length > 0) {
+              preferredBindings = liveBindings;
+            }
+          } else {
+            // When a specific role is requested, try to find bindings without that role first
+            const fallbackCandidates = availableBindings.filter(binding =>
+              !binding.includes(`_${normalizedPostgresBindingRole}`)
+            );
+            
+            if (fallbackCandidates.length > 0) {
+              preferredBindings = fallbackCandidates;
+            }
+          }
+          
+          const fallbackBinding = resolvePostgresBindingByCandidates(env, preferredBindings);
+          if (fallbackBinding) {
+            logger.warn(`[getDb] Falling back to available binding for location ${loc}`, {
+              targetLocation,
+              selectedLocation: loc,
+              selectedBinding: fallbackBinding.bindingName,
+              requestedRole: postgresBindingRole || 'DEFAULT',
+              normalizedRole: normalizedPostgresBindingRole,
+              availableBindings,
+              preferredBindings,
+            });
+            return createPgDrizzleClient(fallbackBinding.connectionString, schema);
+          }
+        }
       }
 
-      logger.warn('[getDb] pgEdge enabled but no matching POSTGRES bindings found', {
+      // Enhanced error message with available bindings
+      const allAvailableBindings: Record<string, string[]> = {};
+      orderedLocations.forEach(loc => {
+        const available = getAvailablePostgresBindingsForLocation(env, loc);
+        if (available.length > 0) {
+          allAvailableBindings[loc] = available;
+        }
+      });
+      
+      logger.error('[getDb] pgEdge enabled but no matching POSTGRES bindings found', undefined, {
         orderedLocations,
         postgresBindingRole: normalizedPostgresBindingRole || 'DEFAULT',
+        allAvailableBindings,
+        envKeys: Object.keys(env).filter(k => k.startsWith('POSTGRES') || k.startsWith('PGEDGE') || k === 'DB_ENGINE'),
       });
     }
 
@@ -268,6 +360,58 @@ export function getDb<S extends DrizzleSchema>(
 
       return createPgDrizzleClient(singleResolved.connectionString, schema);
     }
+    
+    // Fallback logic for single bindings when role is specified but not found
+    // This should handle both cases: when a role is specified and when DEFAULT is used
+    const allPostgresBindings = Object.keys(env).filter(key =>
+      key.startsWith('POSTGRES') &&
+      env[key]?.connectionString &&
+      typeof env[key].connectionString === 'string'
+    );
+    
+    if (env.PGEDGE_DEBUG_LOGGING) {
+      logger.debug('[getDb] Checking single binding fallback logic', {
+        normalizedPostgresBindingRole,
+        originalRole: postgresBindingRole,
+        allPostgresBindings,
+        hasAvailableBindings: allPostgresBindings.length > 0,
+      });
+    }
+    
+    if (allPostgresBindings.length > 0) {
+      let preferredBindings = allPostgresBindings;
+      
+      if (!normalizedPostgresBindingRole) {
+        // When DEFAULT is requested (normalized to undefined), prefer LIVE bindings
+        const liveBindings = allPostgresBindings.filter(binding =>
+          binding.endsWith('_LIVE')
+        );
+        if (liveBindings.length > 0) {
+          preferredBindings = liveBindings;
+        }
+      } else {
+        // When a specific role is requested, try to find bindings without that role first
+        const fallbackCandidates = allPostgresBindings.filter(binding =>
+          !binding.includes(`_${normalizedPostgresBindingRole}`)
+        );
+        
+        if (fallbackCandidates.length > 0) {
+          preferredBindings = fallbackCandidates;
+        }
+      }
+      
+      const fallbackBinding = resolvePostgresBindingByCandidates(env, preferredBindings);
+      if (fallbackBinding) {
+        logger.warn('[getDb] Falling back to available POSTGRES binding', {
+          selectedBinding: fallbackBinding.bindingName,
+          requestedRole: postgresBindingRole || 'DEFAULT',
+          normalizedRole: normalizedPostgresBindingRole,
+          availableBindings: allPostgresBindings,
+          preferredBindings,
+        });
+        return createPgDrizzleClient(fallbackBinding.connectionString, schema);
+      }
+    }
 
     logger.error('[getDb] No POSTGRES binding found', undefined, {
       locationsCount: locations.length,
@@ -276,6 +420,11 @@ export function getDb<S extends DrizzleSchema>(
         getSinglePostgresBindingCandidates(postgresBindingRole)
       ),
       postgresBindingRole: normalizedPostgresBindingRole || 'DEFAULT',
+      allAvailablePostgresBindings: Object.keys(env).filter(key =>
+        key.startsWith('POSTGRES') &&
+        env[key]?.connectionString &&
+        typeof env[key].connectionString === 'string'
+      ),
       envKeys: Object.keys(env).filter(k => k.startsWith('POSTGRES') || k.startsWith('PGEDGE') || k === 'DB_ENGINE'),
     });
     throw new Error("POSTGRES binding with connectionString is required when DB_ENGINE is set to 'postgres'. If using roles, ensure role-specific bindings exist or fallback POSTGRES bindings are configured.");
@@ -330,13 +479,39 @@ export function getPgEdgeLocations(env: AppEnvBindings): string[] {
 }
 
 export function hasPostgresBindings(env: AppEnvBindings, role?: PostgresBindingRole): boolean {
+  // Check single bindings first
   if (resolvePostgresBindingByCandidates(env, getSinglePostgresBindingCandidates(role))) return true;
 
+  // Check single bindings with fallback logic (same as getDb)
+  const allPostgresBindings = Object.keys(env).filter(key =>
+    key.startsWith('POSTGRES') &&
+    env[key]?.connectionString &&
+    typeof env[key].connectionString === 'string'
+  );
+  
+  if (allPostgresBindings.length > 0) {
+    // If there are any POSTGRES bindings, consider them available
+    // This matches the fallback logic in getDb
+    return true;
+  }
+
+  // Check pgEdge location bindings with fallback logic
   const locations = getPgEdgeLocations(env);
   if (locations.length > 0) {
-    return locations.some(loc =>
-      !!resolvePostgresBindingByCandidates(env, getPostgresLocationBindingCandidates(loc, role))
-    );
+    return locations.some(loc => {
+      // First try exact match
+      if (resolvePostgresBindingByCandidates(env, getPostgresLocationBindingCandidates(loc, role))) {
+        return true;
+      }
+      
+      // Then try fallback logic (same as getDb)
+      const availableBindings = getAvailablePostgresBindingsForLocation(env, loc);
+      if (availableBindings.length > 0) {
+        return true;
+      }
+      
+      return false;
+    });
   }
   return false;
 }
