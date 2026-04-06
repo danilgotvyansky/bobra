@@ -18,7 +18,8 @@ import {
   serviceToBindingName,
   getDatabaseBinding,
   getWorkerQueueBindings,
-  getWorkerDbEngine
+  getWorkerDbEngine,
+  flattenHyperdriveConfigs,
 } from '../core/config.js';
 import { JSONValue } from 'hono/utils/types';
 import { gzipSync } from 'zlib';
@@ -303,35 +304,12 @@ export function generateWranglerConfig(config: AppConfig, workerType: string, wo
       try {
         const dbBinding = getDatabaseBinding(config, workerName);
         if (dbBinding.type === 'hyperdrive') {
-          const cfg = dbBinding.config as any;
-          const isSingle = typeof cfg === 'object' && cfg !== null && 'id' in cfg && 'binding' in cfg;
-
-          if (isSingle) {
-            // It's a single HyperdriveConfig
-            wranglerConfig.hyperdrive = [{
-              binding: cfg.binding,
-              id: cfg.id,
-              localConnectionString: cfg.localConnectionString
-            }];
-          } else if (typeof cfg === 'object' && cfg !== null) {
-            // It's a Record<string, HyperdriveConfig>
-            wranglerConfig.hyperdrive = [];
-            for (const [key, hdConfig] of Object.entries(cfg as Record<string, any>)) {
-              if (typeof hdConfig !== 'object' || hdConfig === null || !('id' in hdConfig) || !('binding' in hdConfig)) {
-                throw new Error(`Invalid Hyperdrive configuration for key "${key}" in worker "${workerName}". Expected 'binding' and 'id'.`);
-              }
-              wranglerConfig.hyperdrive.push({
-                binding: hdConfig.binding,
-                id: hdConfig.id,
-                localConnectionString: hdConfig.localConnectionString
-              });
-            }
-            if (wranglerConfig.hyperdrive.length === 0) {
-              throw new Error(`Hyperdrive configuration for worker "${workerName}" cannot be an empty object.`);
-            }
-          } else {
-            throw new Error(`Invalid Hyperdrive configuration format for worker "${workerName}". Expected an object with 'id' and 'binding', or a record of such objects.`);
-          }
+          const flatHyperdriveConfigs = flattenHyperdriveConfigs(dbBinding.config as any);
+          wranglerConfig.hyperdrive = flatHyperdriveConfigs.map((hdConfig) => ({
+            binding: hdConfig.binding,
+            id: hdConfig.id,
+            localConnectionString: hdConfig.localConnectionString
+          }));
         } else if (dbBinding.type === 'd1') {
           wranglerConfig.d1_databases = [{
             binding: dbBinding.config.binding,
@@ -553,17 +531,9 @@ export function main() {
           const dbBinding = getDatabaseBinding(config, workerName);
           console.log(`   Database: ${dbBinding.type} (worker-specific)`);
           if (dbBinding.type === 'hyperdrive') {
-            const cfg = dbBinding.config as any;
-            const isSingle = typeof cfg === 'object' && cfg !== null && 'id' in cfg && 'binding' in cfg;
-
-            if (isSingle) {
-              console.log(`   Hyperdrive ID: ${cfg.id}`);
-            } else if (typeof cfg === 'object' && cfg !== null) {
-              const locations = Object.keys(cfg);
-              console.log(`   Hyperdrive: multi-location (${locations.join(', ')})`);
-            } else {
-              console.log(`   Hyperdrive: Invalid configuration`);
-            }
+            const flatHyperdriveConfigs = flattenHyperdriveConfigs(dbBinding.config as any);
+            const bindingNames = flatHyperdriveConfigs.map((cfg) => cfg.binding);
+            console.log(`   Hyperdrive bindings: ${bindingNames.join(', ')}`);
           } else if (dbBinding.type === 'd1') {
             console.log(`   D1 Database: ${dbBinding.config.database_name}`);
           }

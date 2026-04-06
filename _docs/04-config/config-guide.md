@@ -54,14 +54,68 @@ workers:
     database:
       postgres:
         eu:
-          binding: "HYPERDRIVE_EU"
-          id: "..."
+          default:
+            binding: "HYPERDRIVE_EU"
+            id: "..."
+          live:
+            binding: "HYPERDRIVE_EU_LIVE"
+            id: "..."
       d1:
         binding: "D1_INSTANCE"
     services:
       - binding: "ROUTER"
         service: "main-router"
 ```
+
+### Postgres Binding Shapes
+
+`database.postgres` supports multiple shapes:
+
+```yaml
+# Single binding (works for single-postgres deployments)
+postgres:
+  binding: "POSTGRES"
+  id: "..."
+
+# Multi-location bindings (classic pgEdge)
+postgres:
+  eu:
+    binding: "POSTGRES_EU"
+    id: "..."
+  us:
+    binding: "POSTGRES_US"
+    id: "..."
+
+# Role-based bindings for a location (default + fresh/live)
+postgres:
+  eu:
+    default:
+      binding: "POSTGRES_EU"
+      id: "..."
+    live:
+      binding: "POSTGRES_EU_LIVE"
+      id: "..."
+```
+
+Roles are fully convention-based; Bobra does not enforce specific names. `live` is a common choice for read-after-write-sensitive paths where cached data is unacceptable.
+
+### Runtime Role Selection
+
+You can select a Postgres binding role at runtime:
+
+```typescript
+const db = getDb(env, schema, { postgresBindingRole: 'live' });
+```
+
+Binding resolution order for pgEdge location `eu` with role `live`:
+1. `POSTGRES_EU_LIVE`
+2. `POSTGRES_EU`
+3. `POSTGRES_EU_DEFAULT`
+
+Binding resolution order for single-postgres mode with role `live`:
+1. `POSTGRES_LIVE`
+2. `POSTGRES`
+3. `POSTGRES_DEFAULT`
 
 ### Router Configuration
 

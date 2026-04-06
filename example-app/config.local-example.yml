@@ -74,16 +74,6 @@ workers:
     main: "src/index.ts"
     handlers:
       - "api-docs"
-    database:
-      postgres:
-        binding: "POSTGRES"
-        id: "example-app-postgres-db"
-        localConnectionString: "postgresql://example_app_user:example_app_password@localhost:5432/example_app-db"
-      d1:
-        binding: "D1"
-        database_name: "example-app-db"
-        database_id: "example-app-db"
-        migrations_dir: "../../shared-utils/src/db/migrations-sqlite"
     services:
       - binding: "EXAMPLE_APP_ROUTER"
         service: "example-app-router-worker"
@@ -101,6 +91,23 @@ workers:
         binding: "POSTGRES"
         id: "example-app-postgres-db"
         localConnectionString: "postgresql://example_app_user:example_app_password@localhost:5432/example_app-db"
+      # Example of multiple databases configuration (e.g. for pgEdge multi-region routing)
+      # with non-caching LIVE roles. See _docs/05-database/database.md for details.
+      # postgres:
+      #   eu:
+      #     default:
+      #       binding: "POSTGRES_EU"
+      #       id: "example-app-postgres-db-eu"
+      #     live:
+      #       binding: "POSTGRES_EU_LIVE"
+      #       id: "example-app-postgres-db-eu-live"
+      #   us:
+      #     default:
+      #       binding: "POSTGRES_US"
+      #       id: "example-app-postgres-db-us"
+      #     live:
+      #       binding: "POSTGRES_US_LIVE"
+      #       id: "example-app-postgres-db-us-live"
       d1:
         binding: "D1"
         database_name: "example-app-db"
