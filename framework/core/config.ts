@@ -22,6 +22,9 @@ export interface HyperdriveConfig {
   localConnectionString: string;
 }
 
+export type HyperdriveRoleConfig = Record<string, HyperdriveConfig>;
+export type HyperdrivePostgresConfig = HyperdriveConfig | Record<string, HyperdriveConfig | HyperdriveRoleConfig>;
+
 export interface D1Config {
   binding: string;
   database_name: string;
@@ -62,8 +65,58 @@ export interface WorkerDurableObjectBinding {
 }
 
 export interface WorkerDatabaseConfig {
-  postgres?: HyperdriveConfig | Record<string, HyperdriveConfig>;
+  postgres?: HyperdrivePostgresConfig;
   d1?: D1Config;
+}
+
+function isHyperdriveConfig(value: unknown): value is HyperdriveConfig {
+  return !!value
+    && typeof value === 'object'
+    && 'binding' in value
+    && 'id' in value
+    && typeof (value as Record<string, unknown>).binding === 'string'
+    && typeof (value as Record<string, unknown>).id === 'string';
+}
+
+/**
+ * Flatten Hyperdrive config into a list of concrete bindings.
+ * Supports:
+ * - single: postgres: { binding, id }
+ * - map: postgres: { eu: { binding, id }, us: { binding, id } }
+ * - role map: postgres: { default: { binding, id }, live: { binding, id } }
+ * - nested: postgres: { eu: { default: { binding, id }, live: { binding, id } } }
+ */
+export function flattenHyperdriveConfigs(postgresConfig: HyperdrivePostgresConfig): HyperdriveConfig[] {
+  if (isHyperdriveConfig(postgresConfig)) {
+    return [postgresConfig];
+  }
+
+  const result: HyperdriveConfig[] = [];
+
+  for (const [outerKey, outerValue] of Object.entries(postgresConfig)) {
+    if (isHyperdriveConfig(outerValue)) {
+      result.push(outerValue);
+      continue;
+    }
+
+    if (!outerValue || typeof outerValue !== 'object') {
+      throw new Error(`Invalid Hyperdrive configuration for key "${outerKey}". Expected an object.`);
+    }
+
+    for (const [innerKey, innerValue] of Object.entries(outerValue)) {
+      if (!isHyperdriveConfig(innerValue)) {
+        throw new Error(`Invalid Hyperdrive configuration for key "${outerKey}.${innerKey}". Expected "binding" and "id".`);
+      }
+
+      result.push(innerValue);
+    }
+  }
+
+  if (result.length === 0) {
+    throw new Error('Hyperdrive configuration cannot be empty.');
+  }
+
+  return result;
 }
 
 export interface PgEdgeConfig {
