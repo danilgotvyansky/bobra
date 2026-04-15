@@ -24,7 +24,9 @@ import {
 import { JSONValue } from 'hono/utils/types';
 import { gzipSync } from 'zlib';
 
-interface WranglerConfig {
+export type { AppConfig } from '../core/config.js';
+
+export interface WranglerConfig {
   name: string;
   main: string;
   compatibility_date: string;
@@ -111,6 +113,66 @@ interface WranglerConfig {
       enabled?: boolean;
     };
   };
+  // observability?: {
+  //   traces?: {
+  //     enabled?: boolean;
+  //     destinations?: string[];
+  //   };
+  //   logs?: {
+  //     enabled?: boolean;
+  //     destinations?: string[];
+  //   };
+  // };
+}
+
+export interface WranglerConfigExtensionContext<
+  TConfig extends AppConfig = AppConfig,
+  TWranglerConfig extends WranglerConfig = WranglerConfig,
+> {
+  config: TConfig;
+  workerType: string;
+  workerName: string;
+  wranglerConfig: TWranglerConfig;
+}
+
+export interface WranglerConfigWriteContext<
+  TConfig extends AppConfig = AppConfig,
+  TWranglerConfig extends WranglerConfig = WranglerConfig,
+> extends WranglerConfigExtensionContext<TConfig, TWranglerConfig> {
+  configFile: string;
+  outputFile: string;
+  outputDir: string;
+  outputContent: string;
+}
+
+export interface WranglerConfigGeneratorExtension<
+  TConfig extends AppConfig = AppConfig,
+  TWranglerConfig extends WranglerConfig = WranglerConfig,
+> {
+  validateConfig?: (config: TConfig) => void;
+  extendWranglerConfig?: (
+    context: WranglerConfigExtensionContext<TConfig, TWranglerConfig>
+  ) => TWranglerConfig | void;
+  serializeOutput?: (wranglerConfig: TWranglerConfig) => string;
+  onBeforeWrite?: (context: WranglerConfigWriteContext<TConfig, TWranglerConfig>) => void;
+  onAfterWrite?: (context: WranglerConfigWriteContext<TConfig, TWranglerConfig>) => void;
+}
+
+export interface GenerateWranglerMainOptions<
+  TConfig extends AppConfig = AppConfig,
+  TWranglerConfig extends WranglerConfig = WranglerConfig,
+> {
+  args?: string[];
+  extension?: WranglerConfigGeneratorExtension<TConfig, TWranglerConfig>;
+}
+
+export function defineWranglerConfigExtension<
+  TConfig extends AppConfig = AppConfig,
+  TWranglerConfig extends WranglerConfig = WranglerConfig,
+>(
+  extension: WranglerConfigGeneratorExtension<TConfig, TWranglerConfig>
+): WranglerConfigGeneratorExtension<TConfig, TWranglerConfig> {
+  return extension;
 }
 
 function normalizePathValue(p?: string): string {
@@ -120,7 +182,15 @@ function normalizePathValue(p?: string): string {
   return v;
 }
 
-export function generateWranglerConfig(config: AppConfig, workerType: string, workerName: string): WranglerConfig {
+export function generateWranglerConfig<
+  TConfig extends AppConfig = AppConfig,
+  TWranglerConfig extends WranglerConfig = WranglerConfig,
+>(
+  config: TConfig,
+  workerType: string,
+  workerName: string,
+  extension?: WranglerConfigGeneratorExtension<TConfig, TWranglerConfig>
+): TWranglerConfig {
   const configYaml = dump(config);
   const compressed = gzipSync(configYaml, { mtime: 0 } as any);
   const configContent = compressed.toString('base64');
@@ -129,6 +199,7 @@ export function generateWranglerConfig(config: AppConfig, workerType: string, wo
 
   if (workerType === 'router') {
     const routerConfig = config.router;
+    // const routerObservability = (routerConfig as any)?.observability;
     wranglerConfig = {
       name: routerConfig?.name || "example-app-router-worker",
       main: routerConfig?.main || "src/index.ts",
@@ -144,6 +215,21 @@ export function generateWranglerConfig(config: AppConfig, workerType: string, wo
         ...config.vars,
         ...routerConfig?.vars
       },
+      // observability: {
+      //   ...(routerObservability?.traces ? {
+      //     traces: {
+      //       enabled: routerObservability?.traces?.enabled || false,
+      //       ...(Array.isArray(routerObservability?.traces?.destinations)
+      //         ? { destinations: routerObservability.traces.destinations }
+      //         : {}),
+      //     },
+      //   } : {}),
+      //   logs: {
+      //     enabled: routerObservability?.logs?.enabled || false,
+      //     ...(Array.isArray(routerObservability?.logs?.destinations)
+      //       ? { destinations: routerObservability.logs.destinations }
+      //       : {}),
+      //   }
       observability: {
         logs: {
           enabled: routerConfig?.observability?.logs?.enabled || false
@@ -239,6 +325,7 @@ export function generateWranglerConfig(config: AppConfig, workerType: string, wo
   } else {
     // Worker configuration
     const workerConfig = config.workers?.[workerName];
+    const workerObservability = (workerConfig as any)?.observability;
     wranglerConfig = {
       name: workerConfig?.name || workerName,
       main: workerConfig?.main || "src/index.ts",
@@ -254,6 +341,22 @@ export function generateWranglerConfig(config: AppConfig, workerType: string, wo
         ...config.vars,
         ...workerConfig?.vars
       },
+      // observability: {
+      //   ...(workerObservability?.traces ? {
+      //     traces: {
+      //       enabled: workerObservability?.traces?.enabled || false,
+      //       ...(Array.isArray(workerObservability?.traces?.destinations)
+      //         ? { destinations: workerObservability.traces.destinations }
+      //         : {}),
+      //     },
+      //   } : {}),
+      //   logs: {
+      //     enabled: workerObservability?.logs?.enabled || false,
+      //     ...(Array.isArray(workerObservability?.logs?.destinations)
+      //       ? { destinations: workerObservability.logs.destinations }
+      //       : {}),
+      //   }
+      // }
       observability: {
         logs: {
           enabled: workerConfig?.observability?.logs?.enabled || false
@@ -381,7 +484,15 @@ export function generateWranglerConfig(config: AppConfig, workerType: string, wo
     }
   }
 
-  return wranglerConfig;
+  const baseWranglerConfig = wranglerConfig as TWranglerConfig;
+  const extendedWranglerConfig = extension?.extendWranglerConfig?.({
+    config,
+    workerType,
+    workerName,
+    wranglerConfig: baseWranglerConfig,
+  });
+
+  return extendedWranglerConfig || baseWranglerConfig;
 }
 
 function copyDevVarsToWorker(workerDir: string, repoRoot: string) {
@@ -428,8 +539,13 @@ function storeHash(outputDir: string, hash: string): void {
   }
 }
 
-export function main() {
-  const args = typeof process !== 'undefined' ? process.argv.slice(2) : [];
+export function main<
+  TConfig extends AppConfig = AppConfig,
+  TWranglerConfig extends WranglerConfig = WranglerConfig,
+>(
+  options: GenerateWranglerMainOptions<TConfig, TWranglerConfig> = {}
+) {
+  const args = options.args ?? (typeof process !== 'undefined' ? process.argv.slice(2) : []);
   const configFile = args[0] || process.env.CONFIG_PATH || 'config.yml';
   const outputFile = args[1] || 'wrangler.jsonc';
   const workerType = args[2] || 'worker';
@@ -446,7 +562,7 @@ export function main() {
 
   try {
     const yamlContent = fs.readFileSync(configFile, 'utf8');
-    const config = load(yamlContent) as AppConfig;
+    const config = load(yamlContent) as TConfig;
 
     if (!config.cors || !config.server) {
       throw new Error('Config must include cors and server sections');
@@ -456,7 +572,14 @@ export function main() {
       throw new Error('Server config must include name and version');
     }
 
-    const wranglerConfig = generateWranglerConfig(config, workerType, workerName);
+    options.extension?.validateConfig?.(config);
+
+    const wranglerConfig = generateWranglerConfig<TConfig, TWranglerConfig>(
+      config,
+      workerType,
+      workerName,
+      options.extension
+    );
 
     const outputDir = path.dirname(outputFile);
     if (!fs.existsSync(outputDir)) {
@@ -471,7 +594,8 @@ export function main() {
       } catch { }
     }
 
-    const outputContent = JSON.stringify(wranglerConfig, null, 2);
+    const outputContent = options.extension?.serializeOutput?.(wranglerConfig)
+      ?? JSON.stringify(wranglerConfig, null, 2);
     const newHash = generateHash(outputContent);
 
     if (fs.existsSync(outputFile)) {
@@ -491,10 +615,24 @@ export function main() {
     console.log(`   Worker type: ${workerType}`);
     console.log(`   Worker name: ${workerName}`);
 
+    const writeContext: WranglerConfigWriteContext<TConfig, TWranglerConfig> = {
+      config,
+      workerType,
+      workerName,
+      wranglerConfig,
+      configFile,
+      outputFile,
+      outputDir,
+      outputContent,
+    };
+
+    options.extension?.onBeforeWrite?.(writeContext);
+
     fs.writeFileSync(outputFile, outputContent);
 
     storeHash(outputDir, newHash);
     copyDevVarsToWorker(outputDir, repoRoot);
+    options.extension?.onAfterWrite?.(writeContext);
 
     console.log(`✅ Generated ${outputFile} successfully`);
     console.log(`   Worker name: ${wranglerConfig.name}`);

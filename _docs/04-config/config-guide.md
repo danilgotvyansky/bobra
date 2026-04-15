@@ -161,6 +161,12 @@ Run the sync script before development or deployment:
 pnpm run dev:generate-configs
 ```
 
+## Extending Wrangler Config Generation
+
+Use the dedicated guide for extension setup, typed hook examples, and observability mapping:
+
+- [Wrangler Config Extensions Guide](./wrangler-extensions-guide.md)
+
 ## Local Development
 
 For local development, create a `.dev.vars` or `.env` file at the root of your project to provide secrets and environment-specific values that should not be committed to version control.
