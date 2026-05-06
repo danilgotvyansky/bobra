@@ -41,7 +41,9 @@ export function getServiceBinding(serviceName: string, env: RouterEnv): unknown 
 
   if (!binding) {
     getLogger().error(`Service binding not found: ${bindingName} for service ${serviceName}`);
-    getLogger().info('Available bindings:', Object.keys(env).filter(key => key.endsWith('_WORKER') || key.endsWith('_SERVICE')));
+    getLogger().info('Available bindings:', {
+      bindings: Object.keys(env).filter(key => key.endsWith('_WORKER') || key.endsWith('_SERVICE'))
+    });
   }
 
   return binding;

@@ -1,7 +1,7 @@
 import { load } from 'js-yaml';
 import type { LoggerConfig } from '../logging/logger';
 import { JSONValue } from 'hono/utils/types';
-import { resolveConfig } from './env-resolver';
+import { resolveTypedConfig } from './env-resolver';
 
 // Configuration interfaces
 export interface CorsConfig {
@@ -131,6 +131,13 @@ export interface CloudflareRoute {
   zone_name?: string;
 }
 
+export interface AssetsConfig {
+  directory?: string;
+  run_worker_first?: boolean | string[];
+  not_found_handling?: 'single-page-application' | '404-page' | 'none';
+  html_handling?: 'auto-trailing-slash' | 'force-trailing-slash' | 'drop-trailing-slash' | 'none';
+}
+
 export interface WorkerConfig {
   name: string;
   port?: number;
@@ -156,6 +163,7 @@ export interface WorkerConfig {
   };
   vars?: Record<string, string | number | boolean | JSONValue>;
   cf_routes?: CloudflareRoute[];
+  assets?: AssetsConfig;
   observability?: {
     logs?: {
       enabled?: boolean;
@@ -184,6 +192,7 @@ export interface RouterConfig {
   kv_namespaces?: WorkerKvNamespaceConfig[];
   vars?: Record<string, string | number | boolean | JSONValue>;
   cf_routes?: CloudflareRoute[];
+  assets?: AssetsConfig;
   observability?: {
     logs?: {
       enabled?: boolean;
@@ -244,7 +253,7 @@ export const defaultConfig: AppConfig = {
 };
 
 // Load configuration from YAML content
-export function parseConfig(yamlContent: string, env?: Record<string, any>): AppConfig {
+export function parseConfig(yamlContent: string, env?: Record<string, unknown>): AppConfig {
   try {
     const parsed = load(yamlContent) as Partial<AppConfig>;
 
@@ -272,8 +281,7 @@ export function parseConfig(yamlContent: string, env?: Record<string, any>): App
     // Resolve environment variables if env is provided
     if (env) {
       // For worker runtime: env already contains all vars from wrangler (.dev.vars + secrets)
-      const resolved = resolveConfig(config as Record<string, any>, env);
-      config = resolved as AppConfig;
+      config = resolveTypedConfig(config, env);
     }
 
     return config;
@@ -287,7 +295,7 @@ export function parseConfig(yamlContent: string, env?: Record<string, any>): App
 let configCache: { content: string; config: AppConfig } | null = null;
 
 // Load configuration from environment or use default
-export async function loadConfig(env?: { CONFIG_CONTENT?: string;[key: string]: any }): Promise<AppConfig> {
+export async function loadConfig(env?: { CONFIG_CONTENT?: string; [key: string]: unknown }): Promise<AppConfig> {
   const configContent = env?.CONFIG_CONTENT;
 
   if (configContent) {
@@ -325,7 +333,7 @@ export async function loadConfig(env?: { CONFIG_CONTENT?: string;[key: string]: 
       // If the content looks like Base64-gzipped data, a plain-text YAML parse will never succeed.
       if (configContent.startsWith('H4sI')) {
         const message = 'Failed to decompress Base64-gzipped CONFIG_CONTENT (invalid Base64/gzip data or missing DecompressionStream support).';
-        const err = new Error(message); (err as any).cause = e; throw err;
+        throw new Error(message, { cause: e });
       }
       return parseConfig(configContent, env);
     }
@@ -525,11 +533,11 @@ export function validateConfig(config: AppConfig): void {
 
 // Helper function to get service binding with direct call fallback
 export function getServiceBindingWithFallback(
-  env: any,
+  env: Record<string, unknown>,
   bindingName: string,
   config: AppConfig,
   workerName: string
-): { binding: any; externalUrl?: string } {
+): { binding: unknown; externalUrl?: string } {
   const workerConfig = config.workers?.[workerName];
   const serviceConfig = workerConfig?.services?.find(s => s.binding === bindingName);
 
@@ -549,12 +557,17 @@ export interface ServiceDiscoveryResult {
   allWorkers: Record<string, { handlers: string[]; services: Array<{ binding: string; service: string; external_url?: string }> }>;
 }
 
+type WorkerRegistryLike = {
+  getHandlers?: (workerName: string) => Array<{ name: string }>;
+  getHandlerNames?: (workerName: string) => string[];
+};
+
 // Get service/handler discovery information for current worker
 export function getServiceDiscovery(
-  env: any,
+  env: Record<string, unknown>,
   config: AppConfig,
   workerName: string,
-  workerRegistry: any
+  workerRegistry: WorkerRegistryLike
 ): ServiceDiscoveryResult {
   const routerWorkerName = getRouterWorkerName(config);
   const workerConfig = config.workers?.[workerName];
@@ -564,7 +577,7 @@ export function getServiceDiscovery(
 
   // Get actually initialized handlers from the registry
   const initializedHandlers = workerRegistry.getHandlers
-    ? workerRegistry.getHandlers(workerName).map((h: any) => h.name)
+    ? workerRegistry.getHandlers(workerName).map((h) => h.name)
     : workerRegistry.getHandlerNames
       ? workerRegistry.getHandlerNames(workerName)
       : [];
@@ -637,8 +650,8 @@ export function getServiceDiscovery(
 export function getFetchInstance(
   target: string,
   discovery: ServiceDiscoveryResult,
-  env: any
-): { type: 'handler' | 'service'; name: string; handler?: any; binding?: any; external_url?: string } | null {
+  env: Record<string, unknown>
+): FetchInstance | null {
   // First check if it's a handler on current worker
   if (discovery.initializedHandlers.includes(target)) {
     return { type: 'handler', name: target };
@@ -684,4 +697,12 @@ export function getFetchInstance(
   }
 
   return null;
+}
+
+export interface FetchInstance {
+  type: 'handler' | 'service';
+  name: string;
+  handler?: Function;
+  binding?: unknown;
+  external_url?: string;
 }

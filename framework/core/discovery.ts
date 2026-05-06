@@ -1,6 +1,12 @@
 import type { Hono } from 'hono';
 import type { LoggerConfig } from '../logging/logger';
 
+type HandlerEnv = Record<string, unknown>;
+type HonoEnv = { Bindings: HandlerEnv; Variables?: Record<string, unknown> };
+type QueueBatch = unknown;
+type ScheduledEvent = unknown;
+type ExecutionCtx = unknown;
+
 /**
  * Represents a handler that can be registered with an AppWorker.
  * Each handler is a self-contained unit of business logic with its own routes.
@@ -8,29 +14,29 @@ import type { LoggerConfig } from '../logging/logger';
 export interface AppHandler {
   name: string;
   version: string;
-  routes: Hono<any>;
-  componentSchemas?: Record<string, any>;
+  routes: Hono<HonoEnv>;
+  componentSchemas?: Record<string, unknown>;
   /** Additional security schemes to declare in the handler's OpenAPI spec */
-  securitySchemes?: Record<string, any>;
+  securitySchemes?: Record<string, unknown>;
   // Allow handlers to initialize their own logger with the worker's config
   initLogger?: (config: Partial<LoggerConfig>, context?: string, worker?: string, handler?: string) => void;
   // Allow handlers to perform async initialization (e.g., database connections)
-  init?: (env: any) => Promise<void>;
+  init?: (env: HandlerEnv) => Promise<void>;
   // Queue processing generic callback
-  queue?: (batch: any, env: any, ctx: any) => Promise<void>;
+  queue?: (batch: QueueBatch, env: HandlerEnv, ctx: ExecutionCtx) => Promise<void>;
   // Determine if this handler handles the specific queue batch
   handlesQueue?: (queueName: string, configuredQueues: string[]) => boolean;
   // Let the handler mount directly on root path
   ignoreWorkerBasePath?: boolean;
   // Optional scheduled handler
-  scheduled?: (event: any, env: any, ctx: any) => Promise<void> | void;
+  scheduled?: (event: ScheduledEvent, env: HandlerEnv, ctx: ExecutionCtx) => Promise<void> | void;
 }
 
 /**
  * Represents a registered worker instance with its associated Hono apps.
  */
 export interface WorkerInstance {
-  mainApp: Hono<any> | null;
+  mainApp: Hono<HonoEnv> | null;
   handlers: Map<string, AppHandler>;
 }
 
@@ -42,7 +48,7 @@ export class AppWorkerRegistry {
   private workers: Map<string, WorkerInstance> = new Map();
 
   // Register a worker's main app
-  registerMainApp(workerName: string, app: Hono<any>): void {
+  registerMainApp(workerName: string, app: Hono<HonoEnv>): void {
     const instance = this.getOrCreateWorkerInstance(workerName);
     instance.mainApp = app;
   }
@@ -70,7 +76,7 @@ export class AppWorkerRegistry {
   }
 
   // Get main app for a worker
-  getMainApp(workerName: string): Hono<any> | undefined | null {
+  getMainApp(workerName: string): Hono<HonoEnv> | undefined | null {
     return this.workers.get(workerName)?.mainApp;
   }
 
@@ -86,7 +92,7 @@ export class AppWorkerRegistry {
     return Array.from(this.workers.keys());
   }
 
-  // Check if a handler exists in any worker
+  // Check if a handler exists in at least one worker
   hasHandler(handlerName: string): boolean {
     for (const instance of this.workers.values()) {
       if (instance.handlers.has(handlerName)) return true;

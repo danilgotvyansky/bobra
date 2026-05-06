@@ -36,9 +36,9 @@ export async function createPublicApiToken(options: PublicApiTokenOptions): Prom
     tokenHash: string;
     tokenSalt: string;
     ipAddresses?: string[];
-    createdAt: number;
-    lastUsedAt: number | null;
-    expiresAt: number;
+    createdAt: string;
+    lastUsedAt: string | null;
+    expiresAt: string;
     initToken: boolean;
   };
 }> {
@@ -63,9 +63,9 @@ export async function createPublicApiToken(options: PublicApiTokenOptions): Prom
     tokenHash,
     tokenSalt,
     ipAddresses,
-    createdAt: now,
+    createdAt: new Date(now).toISOString(),
     lastUsedAt: null,
-    expiresAt: finalExpiresAt,
+    expiresAt: new Date(finalExpiresAt).toISOString(),
     initToken
   };
 

@@ -1,5 +1,9 @@
 import { drizzle as drizzlePg } from 'drizzle-orm/node-postgres';
 import { drizzle as drizzleD1 } from 'drizzle-orm/d1';
+import type { AnyPgTable } from 'drizzle-orm/pg-core';
+import type { AnySQLiteTable } from 'drizzle-orm/sqlite-core';
+import type { AnyPgColumn } from 'drizzle-orm/pg-core';
+import type { AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
 import { Pool } from 'pg';
 import { getLogger } from '../logging/logger';
 import type { D1Database, Hyperdrive } from '@cloudflare/workers-types';
@@ -16,10 +20,43 @@ export interface AppEnvBindings {
   [key: string]: unknown;
 }
 
-type DrizzleSchema = Record<string, unknown>;
+export type DrizzleSchema = Record<string, unknown>;
 
 export type DrizzleD1Client<S extends DrizzleSchema = DrizzleSchema> = ReturnType<typeof drizzleD1<S>>;
 export type DrizzlePgClient<S extends DrizzleSchema = DrizzleSchema> = ReturnType<typeof drizzlePg<S>>;
+
+// Shared token table shape used by auth helpers across SQLite/Postgres schemas.
+export type TokenPgColumns = {
+  uid: AnyPgColumn;
+  tokenHash: AnyPgColumn;
+  tokenSalt: AnyPgColumn;
+  expiresAt: AnyPgColumn;
+  createdAt: AnyPgColumn;
+  lastUsedAt: AnyPgColumn;
+  ipAddresses: AnyPgColumn;
+  initToken: AnyPgColumn;
+};
+
+export type TokenSQLiteColumns = {
+  uid: AnySQLiteColumn;
+  tokenHash: AnySQLiteColumn;
+  tokenSalt: AnySQLiteColumn;
+  expiresAt: AnySQLiteColumn;
+  createdAt: AnySQLiteColumn;
+  lastUsedAt: AnySQLiteColumn;
+  ipAddresses: AnySQLiteColumn;
+  initToken: AnySQLiteColumn;
+};
+
+export type TokenTableColumns = TokenPgColumns | TokenSQLiteColumns;
+
+export type TokenPgTable = AnyPgTable & TokenPgColumns;
+export type TokenSQLiteTable = AnySQLiteTable & TokenSQLiteColumns;
+
+export type TokenSchemaBindings = {
+  tokens: TokenPgTable;
+  tokensSqlite: TokenSQLiteTable;
+};
 
 /**
  * Database context for operations
@@ -35,7 +72,7 @@ export interface CfInfo {
   [key: string]: unknown;
 }
 
-export type PgEdgeRouter = (locations: string[], cfContinentStr?: string, cfInfo?: any) => string;
+export type PgEdgeRouter = (locations: string[], cfContinentStr?: string, cfInfo?: unknown) => string;
 export type PostgresBindingRole = string;
 
 export interface DbContextOptions {
@@ -47,6 +84,19 @@ export interface DbContextOptions {
 interface ResolvedPostgresBinding {
   bindingName: string;
   connectionString: string;
+}
+
+interface PostgresBinding {
+  connectionString: string;
+}
+
+function isPostgresBinding(value: unknown): value is PostgresBinding {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  const candidate = value as { connectionString?: unknown };
+  return typeof candidate.connectionString === 'string';
 }
 
 export function normalizePostgresBindingRole(role?: PostgresBindingRole): string | undefined {
@@ -87,7 +137,7 @@ export function getAvailablePostgresBindingsForLocation(env: AppEnvBindings, loc
   // Add any binding that starts with POSTGRES_{LOCATION}
   Object.keys(env).forEach(key => {
     if (key.startsWith(`POSTGRES_${normalizedLocation}_`) || key === `POSTGRES_${normalizedLocation}`) {
-      if (env[key]?.connectionString && typeof env[key].connectionString === 'string') {
+      if (isPostgresBinding(env[key])) {
         availableBindings.push(key);
       }
     }
@@ -112,7 +162,7 @@ function resolvePostgresBindingByCandidates(
 ): ResolvedPostgresBinding | undefined {
   for (const bindingName of candidateBindingNames) {
     const binding = env[bindingName];
-    if (binding?.connectionString && typeof binding.connectionString === 'string') {
+    if (isPostgresBinding(binding)) {
       return {
         bindingName,
         connectionString: binding.connectionString,
@@ -179,6 +229,18 @@ export function isSQLite(ctx: DatabaseContext): boolean {
   return ctx.type === 'd1-sqlite';
 }
 
+export function isSQLiteContext<S extends DrizzleSchema>(
+  ctx: DatabaseContext<S>
+): ctx is { type: 'd1-sqlite'; db: DrizzleD1Client<S> } {
+  return ctx.type === 'd1-sqlite';
+}
+
+export function isPostgresContext<S extends DrizzleSchema>(
+  ctx: DatabaseContext<S>
+): ctx is { type: 'postgres'; db: DrizzlePgClient<S> } {
+  return ctx.type === 'postgres';
+}
+
 /**
  * Returns a Drizzle client using either D1 or PostgreSQL.
  * Consumers pass their own Drizzle schema for typed queries.
@@ -218,7 +280,8 @@ export function getDb<S extends DrizzleSchema>(
   const logger = getLogger();
 
   // Resolve continent: prefer direct cf object, fall back to router-forwarded header
-  const continent = cfInfo?.continent ?? (env as any).__cfContinent ?? undefined;
+  const envWithContinent = env as AppEnvBindings & { __cfContinent?: string };
+  const continent = cfInfo?.continent ?? envWithContinent.__cfContinent ?? undefined;
 
   if (env.PGEDGE_DEBUG_LOGGING) {
     logger.debug('[getDb] Starting DB resolution', {
@@ -369,8 +432,7 @@ export function getDb<S extends DrizzleSchema>(
     // This should handle both cases: when a role is specified and when DEFAULT is used
     const allPostgresBindings = Object.keys(env).filter(key =>
       key.startsWith('POSTGRES') &&
-      env[key]?.connectionString &&
-      typeof env[key].connectionString === 'string'
+      isPostgresBinding(env[key])
     );
     
     if (env.PGEDGE_DEBUG_LOGGING) {
@@ -426,8 +488,7 @@ export function getDb<S extends DrizzleSchema>(
       postgresBindingRole: normalizedPostgresBindingRole || 'DEFAULT',
       allAvailablePostgresBindings: Object.keys(env).filter(key =>
         key.startsWith('POSTGRES') &&
-        env[key]?.connectionString &&
-        typeof env[key].connectionString === 'string'
+        isPostgresBinding(env[key])
       ),
       envKeys: Object.keys(env).filter(k => k.startsWith('POSTGRES') || k.startsWith('PGEDGE') || k === 'DB_ENGINE'),
     });
@@ -476,7 +537,11 @@ export function getPgEdgeLocations(env: AppEnvBindings): string[] {
         getLogger().warn('PGEDGE_LOCATIONS must be an array of strings');
       }
     } catch (e) {
-      getLogger().warn('Failed to parse PGEDGE_LOCATIONS', e instanceof Error ? e : new Error(String(e)));
+      const parseError = e instanceof Error ? e : new Error(String(e));
+      getLogger().warn('Failed to parse PGEDGE_LOCATIONS', {
+        name: parseError.name,
+        message: parseError.message,
+      });
     }
   }
   return pgedgeLocations;
@@ -489,8 +554,7 @@ export function hasPostgresBindings(env: AppEnvBindings, role?: PostgresBindingR
   // Check single bindings with fallback logic (same as getDb)
   const allPostgresBindings = Object.keys(env).filter(key =>
     key.startsWith('POSTGRES') &&
-    env[key]?.connectionString &&
-    typeof env[key].connectionString === 'string'
+    isPostgresBinding(env[key])
   );
   
   if (allPostgresBindings.length > 0) {

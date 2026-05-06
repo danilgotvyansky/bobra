@@ -7,7 +7,8 @@ import {
   getServiceDiscovery,
   getFetchInstance,
   getRouterBasePath,
-  getRouterWorkerName
+  getRouterWorkerName,
+  type FetchInstance
 } from '../core/config';
 import { Context } from 'hono';
 import type { RouterEnv } from './router';
@@ -52,16 +53,7 @@ function redactOptions(options?: RequestInit): RequestInit | undefined {
 export async function serviceFetch(
   // Replaced any with RouterEnv - matches framework's environment interface
   env: RouterEnv,
-  // Replaced any with HandlerType and BindingType per type safety audit
-  fetchInstance: {
-    type: 'handler' | 'service';
-    name: string;
-    // Replaced any with Function - handler must be executable
-    handler?: Function;
-    // Replaced any with unknown - binding is a named identifier
-    binding?: unknown;
-    external_url?: string
-  } | string,
+  fetchInstance: FetchInstance | string,
   uri: string,
   options: RequestInit = {},
   // Replaced any with Hono Context - standard request context
@@ -74,7 +66,7 @@ export async function serviceFetch(
   const routerWorkerName = getRouterWorkerName(config);
 
   // If fetchInstance is a string, resolve it to an actual instance
-  let instance: { type: 'handler' | 'service'; name: string; handler?: Function; binding?: unknown; external_url?: string } | null;
+  let instance: FetchInstance | null;
 
   if (typeof fetchInstance === 'string') {
     instance = getFetchInstance(fetchInstance, discovery, env);

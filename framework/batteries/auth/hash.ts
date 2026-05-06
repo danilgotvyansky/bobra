@@ -1,5 +1,28 @@
 import { getLogger } from '../../logging/logger';
-import { isSQLite, type DatabaseContext } from '../../db/client';
+import {
+  isSQLiteContext,
+  isPostgresContext,
+  type DatabaseContext,
+  type DrizzleSchema,
+  type TokenSchemaBindings,
+  type TokenRecordInput,
+  type TokenRecordRaw,
+  type DateLike,
+  type IpAddressesLike,
+  tokenRecordRawSchema,
+  ipAddressListSchema,
+} from '../../db';
+import * as v from 'valibot';
+
+export function parseTokenRecord(input: TokenRecordInput): TokenRecordRaw | undefined {
+  const parsed = v.safeParse(tokenRecordRawSchema, input);
+  return parsed.success ? parsed.output : undefined;
+}
+
+export function parseIpAddressList(input: string[]): string[] | undefined {
+  const parsed = v.safeParse(ipAddressListSchema, input);
+  return parsed.success ? parsed.output : undefined;
+}
 
 // Token hash algorithm configuration
 const HASH_CONFIG = {
@@ -16,50 +39,95 @@ export async function hashToken(token: string, salt: string): Promise<string> {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+export type MatchedTokenRecord = Omit<TokenRecordRaw, 'createdAt' | 'expiresAt' | 'lastUsedAt' | 'ipAddresses'> & {
+  createdAt: Date;
+  expiresAt: Date;
+  lastUsedAt?: Date;
+  ipAddresses?: string[];
+};
+
+function normalizeDate(value: DateLike | null | undefined): Date | undefined {
+  if (!value) return undefined;
+  if (value instanceof Date) return value;
+  if (typeof value === 'number') return new Date(value);
+  if (typeof value === 'string') return new Date(value);
+  return undefined;
+}
+
+function parseIps(value: IpAddressesLike | undefined): string[] | undefined {
+  if (!value) return undefined;
+  if (Array.isArray(value)) return value;
+
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return parseIpAddressList(parsed);
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
 // Find a token record by computing hash against all stored records
 export async function findTokenByHash(
-  ctx: DatabaseContext<any>,
+  ctx: DatabaseContext<DrizzleSchema>,
   token: string,
-  schema: any,
-) {
+  schema: TokenSchemaBindings,
+): Promise<MatchedTokenRecord | null> {
   try {
-    const t = isSQLite(ctx) ? schema.tokensSqlite : schema.tokens;
-    const tokenRecords = await (ctx.db as any).select({
-      uid: (t as any).uid,
-      tokenHash: t.tokenHash,
-      tokenSalt: t.tokenSalt,
-      expiresAt: t.expiresAt,
-      createdAt: t.createdAt,
-      lastUsedAt: t.lastUsedAt,
-      ipAddresses: t.ipAddresses,
-      initToken: t.initToken
-    }).from(t);
+    let tokenRecords: TokenRecordInput[];
 
-    for (const record of tokenRecords) {
+    if (isSQLiteContext(ctx)) {
+      tokenRecords = await ctx.db.select({
+        uid: schema.tokensSqlite.uid,
+        tokenHash: schema.tokensSqlite.tokenHash,
+        tokenSalt: schema.tokensSqlite.tokenSalt,
+        expiresAt: schema.tokensSqlite.expiresAt,
+        createdAt: schema.tokensSqlite.createdAt,
+        lastUsedAt: schema.tokensSqlite.lastUsedAt,
+        ipAddresses: schema.tokensSqlite.ipAddresses,
+        initToken: schema.tokensSqlite.initToken
+      }).from(schema.tokensSqlite) as TokenRecordInput[];
+    } else if (isPostgresContext(ctx)) {
+      tokenRecords = await ctx.db.select({
+        uid: schema.tokens.uid,
+        tokenHash: schema.tokens.tokenHash,
+        tokenSalt: schema.tokens.tokenSalt,
+        expiresAt: schema.tokens.expiresAt,
+        createdAt: schema.tokens.createdAt,
+        lastUsedAt: schema.tokens.lastUsedAt,
+        ipAddresses: schema.tokens.ipAddresses,
+        initToken: schema.tokens.initToken
+      }).from(schema.tokens) as TokenRecordInput[];
+    } else {
+      throw new Error('Unsupported database context type');
+    }
+
+    for (const rawRecord of tokenRecords) {
       try {
+        const record = parseTokenRecord(rawRecord);
+        if (!record) {
+          continue;
+        }
+
+        if (typeof record.tokenSalt !== 'string' || typeof record.tokenHash !== 'string') {
+          continue;
+        }
+
         const computedHash = await hashToken(token, record.tokenSalt);
         if (computedHash === record.tokenHash) {
-          // Normalize date fields across engines
-          const normalizeDate = (d: any) => {
-            if (!d) return undefined;
-            if (d instanceof Date) return d;
-            if (typeof d === 'number') return new Date(d);
-            if (typeof d === 'string') return new Date(d);
-            return undefined;
-          };
-          // Parse ipAddresses if stored as text (sqlite)
-          const parseIps = (ips: any) => {
-            if (!ips) return undefined;
-            if (Array.isArray(ips)) return ips;
-            if (typeof ips === 'string') {
-              try { return JSON.parse(ips); } catch { return undefined; }
-            }
-            return undefined;
-          };
+          const createdAt = normalizeDate(record.createdAt);
+          const expiresAt = normalizeDate(record.expiresAt);
+
+          if (!createdAt || !expiresAt) {
+            continue;
+          }
+
           return {
             ...record,
-            createdAt: normalizeDate(record.createdAt)!,
-            expiresAt: normalizeDate(record.expiresAt)!,
+            createdAt,
+            expiresAt,
             lastUsedAt: normalizeDate(record.lastUsedAt),
             ipAddresses: parseIps(record.ipAddresses)
           };

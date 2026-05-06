@@ -24,5 +24,8 @@
     "node_modules",
     "dist",
     "**/*.spec.ts"
+  ],
+  "types": [
+    "node"
   ]
 }

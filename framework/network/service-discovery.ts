@@ -9,7 +9,7 @@ import { Context, Next } from 'hono';
  * Logs warnings when config doesn't match available bindings/handlers.
  */
 export function serviceDiscoveryMiddleware(
-  env: any,
+  env: Record<string, unknown>,
   config: AppConfig,
   workerName: string
 ): MiddlewareHandler {

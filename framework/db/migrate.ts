@@ -46,7 +46,8 @@ if (typeof process !== 'undefined' && process.versions && process.versions.node)
 
 // Only import Node.js specific modules conditionally
 let execSync: Function | null = null;
-let fs: any = null;
+type NodeFsModule = typeof import('fs');
+let fs: NodeFsModule | null = null;
 
 // Check if we're in Node.js environment
 const isNode = typeof process !== 'undefined' && process.versions && process.versions.node;
@@ -55,7 +56,7 @@ if (isNode) {
   // We're in Node.js - import Node-specific modules
   const childProcess = require('child_process');
   execSync = childProcess.execSync;
-  fs = require('fs');
+  fs = require('fs') as NodeFsModule;
 }
 
 // Import DB modules that work in both environments

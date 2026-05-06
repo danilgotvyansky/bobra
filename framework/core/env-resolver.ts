@@ -17,6 +17,12 @@
  * Parse .dev.vars file format (key=value, one per line, shell-style comments)
  * Returns Map for efficient lookup
  */
+type EnvMap = Record<string, unknown>;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
 export function parseDevVars(content: string): Map<string, string> {
   const vars = new Map<string, string>();
   const lines = content.split('\n');
@@ -74,7 +80,7 @@ export function extractVariableNames(value: string): string[] {
  */
 export function resolveVariable(
   varName: string,
-  env: Record<string, any>,
+  env: EnvMap,
   devVars: Map<string, string>
 ): string | undefined {
   // 1. Check env bindings (Cloudflare secrets at runtime)
@@ -97,7 +103,7 @@ export function resolveVariable(
  */
 export function resolveStringValue(
   value: string,
-  env: Record<string, any>,
+  env: EnvMap,
   devVars: Map<string, string>
 ): string {
   // Pattern matches both $VAR and ${VAR}
@@ -112,10 +118,10 @@ export function resolveStringValue(
  * Handles: strings, numbers, booleans, objects, arrays
  */
 export function resolveValue(
-  value: any,
-  env: Record<string, any>,
+  value: unknown,
+  env: EnvMap,
   devVars: Map<string, string>
-): any {
+): unknown {
   if (value === null || value === undefined) {
     return value;
   }
@@ -132,8 +138,8 @@ export function resolveValue(
     return value.map(item => resolveValue(item, env, devVars));
   }
 
-  if (typeof value === 'object') {
-    const resolved: Record<string, any> = {};
+  if (isRecord(value)) {
+    const resolved: Record<string, unknown> = {};
     for (const [key, val] of Object.entries(value)) {
       resolved[key] = resolveValue(val, env, devVars);
     }
@@ -152,9 +158,17 @@ export function resolveValue(
  * @param devVars - Optional file-based vars (for Node.js scripts only, defaults to empty)
  */
 export function resolveConfig(
-  config: Record<string, any>,
-  env: Record<string, any>,
+  config: Record<string, unknown>,
+  env: EnvMap,
   devVars: Map<string, string> = new Map()
-): Record<string, any> {
-  return resolveValue(config, env, devVars);
+): Record<string, unknown> {
+  return resolveValue(config, env, devVars) as Record<string, unknown>;
+}
+
+export function resolveTypedConfig<TConfig>(
+  config: TConfig,
+  env: EnvMap,
+  devVars: Map<string, string> = new Map()
+): TConfig {
+  return resolveValue(config, env, devVars) as TConfig;
 }

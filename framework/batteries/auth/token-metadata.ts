@@ -1,14 +1,17 @@
 import { eq } from 'drizzle-orm';
-import { isSQLite, type DatabaseContext } from '../../db/client';
-// Schema placeholder - the framework does NOT define any tables
-// Instead, define them in your application
-type AppSchema = Record<string, unknown>;
+import { 
+  isSQLiteContext,
+  isPostgresContext,
+  type DatabaseContext,
+  type DrizzleSchema,
+  type TokenSchemaBindings
+} from '../../db/client';
 
 
 // Database client interface for token metadata update
 export interface TokenMetadataUpdateClient {
-  ctx: DatabaseContext<AppSchema>;
-  schema: AppSchema;
+  ctx: DatabaseContext<DrizzleSchema>;
+  schema: TokenSchemaBindings;
 }
 
 // Update the lastUsedAt timestamp for a token
@@ -16,9 +19,19 @@ export async function updateTokenLastUsed(
   client: TokenMetadataUpdateClient,
   tokenUid: string
 ): Promise<void> {
-  const useSqlite = isSQLite(client.ctx);
-  const table = useSqlite ? client.schema.tokensSqlite : client.schema.tokens;
-  await (client.ctx.db as { update: (table: unknown) => { set: (data: unknown) => { where: (condition: unknown) => Promise<void> } } }).update(table)
-    .set({ lastUsedAt: useSqlite ? new Date().toISOString() : new Date() })
-    .where(eq((table as any).uid, tokenUid));
+  if (isSQLiteContext(client.ctx)) {
+    await client.ctx.db.update(client.schema.tokensSqlite)
+      .set({ lastUsedAt: new Date().toISOString() })
+      .where(eq(client.schema.tokensSqlite.uid, tokenUid));
+    return;
+  }
+
+  if (isPostgresContext(client.ctx)) {
+    await client.ctx.db.update(client.schema.tokens)
+      .set({ lastUsedAt: new Date() })
+      .where(eq(client.schema.tokens.uid, tokenUid));
+    return;
+  }
+
+  throw new Error('Unsupported database context type');
 }

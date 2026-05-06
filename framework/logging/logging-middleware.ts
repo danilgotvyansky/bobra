@@ -12,7 +12,7 @@ export interface HonoLoggerOptions {
   /**
    * Custom function to extract additional metadata
    */
-  getMetadata?: (c: Context) => Record<string, any>;
+  getMetadata?: (c: Context) => Record<string, unknown>;
 
   /**
    * Skip logging for certain paths (e.g., health checks)
@@ -81,12 +81,15 @@ const defaultOptions: HonoLoggerOptions = {
 async function setupLoggerContext(c: Context, path: string) {
   const logger = getLogger();
   try {
-    const envAny = c.env as any;
-    const workerName = envAny?.WORKER_NAME as string | undefined;
+    const envBindings = c.env as Record<string, unknown> & {
+      WORKER_NAME?: string;
+      CONFIG_CONTENT?: string;
+    };
+    const workerName = typeof envBindings.WORKER_NAME === 'string' ? envBindings.WORKER_NAME : undefined;
 
     // config access is safe here because loadConfig handles decompression/caching
-    if (workerName && envAny?.CONFIG_CONTENT) {
-      const config = await loadConfig(envAny);
+    if (workerName && typeof envBindings.CONFIG_CONTENT === 'string') {
+      const config = await loadConfig(envBindings);
       const basePath = getWorkerBasePath(config, workerName);
       const handlers = config.workers?.[workerName]?.handlers || [];
       const handlerNames = new Set<string>(handlers);
@@ -143,7 +146,7 @@ export function honoLogger(options: HonoLoggerOptions = {}) {
     }
 
     // Log request body if enabled
-    let requestBody: any = undefined;
+    let requestBody: unknown = undefined;
     if (opts.logRequestBody && ['POST', 'PUT', 'PATCH'].includes(method)) {
       try {
         const contentType = c.req.header('Content-Type');
@@ -153,7 +156,7 @@ export function honoLogger(options: HonoLoggerOptions = {}) {
             requestBody = JSON.parse(body);
           }
         }
-      } catch (error) {
+      } catch {
         // Ignore body parsing errors
       }
     }
@@ -163,7 +166,7 @@ export function honoLogger(options: HonoLoggerOptions = {}) {
     const ms = Date.now() - start;
 
     // Log response body if enabled
-    let responseBody: any = undefined;
+    let responseBody: unknown = undefined;
     if (opts.logResponseBody && c.res.body) {
       try {
         const contentType = c.res.headers.get('Content-Type');
@@ -174,7 +177,7 @@ export function honoLogger(options: HonoLoggerOptions = {}) {
             responseBody = JSON.parse(body);
           }
         }
-      } catch (error) {
+      } catch {
         // Ignore response body parsing errors
       }
     }

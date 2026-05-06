@@ -192,14 +192,13 @@ export function generateWranglerConfig<
   extension?: WranglerConfigGeneratorExtension<TConfig, TWranglerConfig>
 ): TWranglerConfig {
   const configYaml = dump(config);
-  const compressed = gzipSync(configYaml, { mtime: 0 } as any);
+  const compressed = gzipSync(configYaml);
   const configContent = compressed.toString('base64');
 
   let wranglerConfig: WranglerConfig;
 
   if (workerType === 'router') {
     const routerConfig = config.router;
-    // const routerObservability = (routerConfig as any)?.observability;
     wranglerConfig = {
       name: routerConfig?.name || "example-app-router-worker",
       main: routerConfig?.main || "src/index.ts",
@@ -237,9 +236,8 @@ export function generateWranglerConfig<
       }
     };
 
-    const rcAny = routerConfig as any;
-    const assetsDirectory: string | undefined = rcAny?.assets?.directory || 'public';
-    let runWorkerFirstConfig: boolean | string[] | undefined = rcAny?.assets?.run_worker_first;
+    const assetsDirectory: string | undefined = routerConfig?.assets?.directory || 'public';
+    let runWorkerFirstConfig: boolean | string[] | undefined = routerConfig?.assets?.run_worker_first;
 
     const patterns = new Set<string>();
 
@@ -271,8 +269,8 @@ export function generateWranglerConfig<
     } else {
       runWorkerFirst = Array.from(patterns);
     }
-    const notFoundHandling: 'single-page-application' | '404-page' | 'none' | undefined = rcAny?.assets?.not_found_handling || 'single-page-application';
-    const htmlHandling: 'auto-trailing-slash' | 'force-trailing-slash' | 'drop-trailing-slash' | 'none' | undefined = rcAny?.assets?.html_handling;
+    const notFoundHandling: 'single-page-application' | '404-page' | 'none' | undefined = routerConfig?.assets?.not_found_handling || 'single-page-application';
+    const htmlHandling: 'auto-trailing-slash' | 'force-trailing-slash' | 'drop-trailing-slash' | 'none' | undefined = routerConfig?.assets?.html_handling;
     wranglerConfig.assets = {
       directory: assetsDirectory,
       binding: 'ASSETS',
@@ -325,7 +323,6 @@ export function generateWranglerConfig<
   } else {
     // Worker configuration
     const workerConfig = config.workers?.[workerName];
-    const workerObservability = (workerConfig as any)?.observability;
     wranglerConfig = {
       name: workerConfig?.name || workerName,
       main: workerConfig?.main || "src/index.ts",
@@ -374,10 +371,9 @@ export function generateWranglerConfig<
       }
     }
 
-    const workerConfigAny = workerConfig as any;
-    if (workerConfigAny?.assets) {
-      const assetsDirectory: string | undefined = workerConfigAny?.assets?.directory || 'public';
-      let runWorkerFirstConfig: boolean | string[] | undefined = workerConfigAny?.assets?.run_worker_first;
+    if (workerConfig?.assets) {
+      const assetsDirectory: string | undefined = workerConfig.assets.directory || 'public';
+      let runWorkerFirstConfig: boolean | string[] | undefined = workerConfig.assets.run_worker_first;
 
       const patterns = new Set<string>();
       if (Array.isArray(runWorkerFirstConfig)) {
@@ -391,8 +387,8 @@ export function generateWranglerConfig<
         runWorkerFirst = Array.from(patterns);
       }
 
-      const notFoundHandling: 'single-page-application' | '404-page' | 'none' | undefined = workerConfigAny?.assets?.not_found_handling || 'single-page-application';
-      const htmlHandling: 'auto-trailing-slash' | 'force-trailing-slash' | 'drop-trailing-slash' | 'none' | undefined = workerConfigAny?.assets?.html_handling;
+      const notFoundHandling: 'single-page-application' | '404-page' | 'none' | undefined = workerConfig.assets.not_found_handling || 'single-page-application';
+      const htmlHandling: 'auto-trailing-slash' | 'force-trailing-slash' | 'drop-trailing-slash' | 'none' | undefined = workerConfig.assets.html_handling;
 
       wranglerConfig.assets = {
         directory: assetsDirectory,
@@ -407,7 +403,7 @@ export function generateWranglerConfig<
       try {
         const dbBinding = getDatabaseBinding(config, workerName);
         if (dbBinding.type === 'hyperdrive') {
-          const flatHyperdriveConfigs = flattenHyperdriveConfigs(dbBinding.config as any);
+          const flatHyperdriveConfigs = flattenHyperdriveConfigs(dbBinding.config);
           wranglerConfig.hyperdrive = flatHyperdriveConfigs.map((hdConfig) => ({
             binding: hdConfig.binding,
             id: hdConfig.id,
@@ -669,7 +665,7 @@ export function main<
           const dbBinding = getDatabaseBinding(config, workerName);
           console.log(`   Database: ${dbBinding.type} (worker-specific)`);
           if (dbBinding.type === 'hyperdrive') {
-            const flatHyperdriveConfigs = flattenHyperdriveConfigs(dbBinding.config as any);
+            const flatHyperdriveConfigs = flattenHyperdriveConfigs(dbBinding.config);
             const bindingNames = flatHyperdriveConfigs.map((cfg) => cfg.binding);
             console.log(`   Hyperdrive bindings: ${bindingNames.join(', ')}`);
           } else if (dbBinding.type === 'd1') {

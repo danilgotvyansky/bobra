@@ -17,18 +17,55 @@ import {
 } from './config';
 import { serviceDiscoveryMiddleware } from '../network/service-discovery';
 import { generateSpecs } from 'hono-openapi';
+import type { OpenAPIV3 } from 'openapi-types';
+import type { MessageBatch, ExecutionContext, ScheduledController } from '@cloudflare/workers-types';
+
+const OPENAPI_METHODS = ['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'] as const;
+type OpenApiMethod = typeof OPENAPI_METHODS[number];
+type HonoBindingsEnv = { Bindings: Record<string, unknown>; Variables?: Record<string, unknown> };
+
+type JsonNode = string | number | boolean | null | JsonNode[] | { [key: string]: JsonNode };
+type QueuePayload = Record<string, string | number | boolean | null>;
+type QueueBatch = MessageBatch<QueuePayload>;
+type WorkerExecutionCtx = ExecutionContext;
+type ScheduledEvent = ScheduledController;
+type SchemaMap = Record<string, OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject>;
+type SecuritySchemeMap = Record<string, OpenAPIV3.SecuritySchemeObject | OpenAPIV3.ReferenceObject>;
+
+interface RequestWithCf extends Request {
+  cf?: Record<string, unknown> & {
+    continent?: string;
+  };
+}
+
+function isJsonObject(node: JsonNode): node is { [key: string]: JsonNode } {
+  return typeof node === 'object' && node !== null && !Array.isArray(node);
+}
+
+function isPathItemObject(item: OpenAPIV3.PathItemObject | OpenAPIV3.ReferenceObject): item is OpenAPIV3.PathItemObject {
+  return !('$ref' in item);
+}
+
+function hasOperation(pathItem: OpenAPIV3.PathItemObject): boolean {
+  return OPENAPI_METHODS.some((method) => Boolean(pathItem[method]));
+}
 
 // Helper: collect schema $ref names referenced anywhere in the OpenAPI spec
-function collectReferencedSchemaNames(obj: any): Set<string> {
+function collectReferencedSchemaNames(obj: JsonNode): Set<string> {
   const set = new Set<string>();
-  function scan(val: any) {
-    if (typeof val === 'object' && val !== null) {
-      for (const k in val) {
-        if (k === '$ref' && typeof val[k] === 'string') {
-          const m = val[k].match(/^#\/components\/schemas\/([A-Za-z0-9_.-]+)/);
+  function scan(val: JsonNode) {
+    if (Array.isArray(val)) {
+      for (const item of val) scan(item);
+      return;
+    }
+
+    if (isJsonObject(val)) {
+      for (const [k, value] of Object.entries(val)) {
+        if (k === '$ref' && typeof value === 'string') {
+          const m = value.match(/^#\/components\/schemas\/([A-Za-z0-9_.-]+)/);
           if (m && m[1]) set.add(m[1]);
         } else {
-          scan(val[k]);
+          scan(value);
         }
       }
     }
@@ -37,19 +74,23 @@ function collectReferencedSchemaNames(obj: any): Set<string> {
   return set;
 }
 
-function pruneComponents(full: any, paths: any, keepAlways: string[] = []) {
-  const result: any = { ...(full.components || {}) };
-  const schemas = (full.components && full.components.schemas) || {};
+function pruneComponents(
+  full: OpenAPIV3.Document,
+  paths: OpenAPIV3.PathsObject,
+  keepAlways: string[] = []
+): OpenAPIV3.ComponentsObject {
+  const result: OpenAPIV3.ComponentsObject = { ...(full.components || {}) };
+  const schemas = (full.components?.schemas || {}) as SchemaMap;
 
   // Start with schemas referenced directly from paths
-  const refs = collectReferencedSchemaNames(paths);
+  const refs = collectReferencedSchemaNames(paths as JsonNode);
 
   // Always-keep schemas should be included in the starting set as well
   for (const name of keepAlways) {
     refs.add(name);
   }
 
-  const kept: Record<string, any> = {};
+  const kept: SchemaMap = {};
 
   // Traverse schema references transitively using a work queue to ensure 
   // nested dependencies are not pruned.
@@ -65,8 +106,8 @@ function pruneComponents(full: any, paths: any, keepAlways: string[] = []) {
     // Keep this schema
     kept[name] = schema;
 
-    // Find any schemas it references and add them to the queue if not already seen
-    const nestedRefs = collectReferencedSchemaNames(schema);
+    // Find referenced schemas and add them to the queue if not already seen
+    const nestedRefs = collectReferencedSchemaNames(schema as JsonNode);
     for (const dep of nestedRefs) {
       if (!refs.has(dep)) {
         refs.add(dep);
@@ -83,15 +124,15 @@ export interface OpenAPISpecOptions {
   /** The path where the OpenAPI spec will be served (e.g. '/openapi', '/internal/openapi') */
   path?: string;
   /** Return true to exclude an operation from the generated OpenAPI spec */
-  excludeEndpoint?: (path: string, method: string, operation: any) => boolean;
-  /** Exclude operations that have any of these tags (e.g. ['internal']) */
+  excludeEndpoint?: (path: string, method: OpenApiMethod, operation: OpenAPIV3.OperationObject) => boolean;
+  /** Exclude operations that have one of these tags (e.g. ['internal']) */
   excludeTags?: string[];
   /** Whether or not to prune unreferenced OpenAPI component schemas (defaults to true if exclusions are used) */
   pruneComponents?: boolean;
   /** An array of schema names to always keep in the OpenAPI spec if pruneComponents is true */
   pruneComponentsKeepAlways?: string[];
   /** Additional security schemes to add to the OpenAPI spec */
-  securitySchemes?: Record<string, any>;
+  securitySchemes?: SecuritySchemeMap;
 }
 
 export interface WorkerOptions {
@@ -102,13 +143,14 @@ export interface WorkerOptions {
 export interface WorkerEnv {
   CONFIG_CONTENT?: string;
   WORKER_NAME?: string;
-  // Dynamic service bindings - any is necessary here because bindings are determined at runtime
-  [key: string]: any;
+  __cfContinent?: string;
+  // Bindings are deployment-specific and can include D1/KV/R2/DO namespaces.
+  [key: string]: unknown;
 }
 
 // Create a new worker instance with common middleware
 export async function createWorker(env?: WorkerEnv, options?: WorkerOptions): Promise<AppWorker> {
-  const app = new Hono<{ Bindings: WorkerEnv }>();
+  const app = new Hono<HonoBindingsEnv>();
 
   const config = await loadConfig(env || {});
   validateConfig(config);
@@ -150,7 +192,7 @@ export async function createWorker(env?: WorkerEnv, options?: WorkerOptions): Pr
 
   // Worker-level OpenAPI with router base path prefixing
   (() => {
-    const specApp = new Hono<{ Bindings: WorkerEnv }>();
+    const specApp = new Hono<HonoBindingsEnv>();
     const routerBase = getRouterBasePath(config);
     // Mount the worker app under router base path so generated paths include router base
     specApp.route(routerBase === '/' ? '/' : routerBase, app);
@@ -163,7 +205,7 @@ export async function createWorker(env?: WorkerEnv, options?: WorkerOptions): Pr
           description: config.server.description,
         },
       },
-    } as any;
+    };
 
     const specDefs = options?.openapi
       ? (Array.isArray(options.openapi) ? options.openapi : [options.openapi])
@@ -172,32 +214,47 @@ export async function createWorker(env?: WorkerEnv, options?: WorkerOptions): Pr
     for (const specDef of specDefs) {
       const specPath = specDef.path || '/openapi';
       app.get(specPath, async (c) => {
-        const full = await generateSpecs(specApp, specOptions, undefined, c);
+        const full = await generateSpecs(specApp, specOptions, undefined, c) as OpenAPIV3.Document;
         const { excludeEndpoint, excludeTags, pruneComponents: specPrune, securitySchemes } = specDef;
         const hasExclusions = !!excludeEndpoint || (!!excludeTags && excludeTags.length > 0);
 
         let finalSpec = full;
 
         if (hasExclusions) {
-          const filtered: any = { ...full, paths: {} };
-          for (const [path, ops] of Object.entries(full.paths || {})) {
-            const keepOps: any = {};
-            for (const [method, op] of Object.entries(ops as any)) {
+          const filtered: OpenAPIV3.Document = { ...full, paths: {} };
+          for (const [path, pathItemOrRef] of Object.entries(full.paths ?? {}) as Array<[string, OpenAPIV3.PathItemObject | OpenAPIV3.ReferenceObject]>) {
+            if (!pathItemOrRef) continue;
+
+            if (!isPathItemObject(pathItemOrRef)) {
+              filtered.paths[path] = pathItemOrRef;
+              continue;
+            }
+
+            const keepPathItem: OpenAPIV3.PathItemObject = { ...pathItemOrRef };
+
+            for (const method of OPENAPI_METHODS) {
+              const operation = pathItemOrRef[method];
+              if (!operation) continue;
+
               let shouldExclude = false;
-              if (excludeEndpoint && excludeEndpoint(path, method, op)) {
+              if (excludeEndpoint && excludeEndpoint(path, method, operation)) {
                 shouldExclude = true;
               }
-              if (!shouldExclude && excludeTags && Array.isArray((op as any).tags)) {
-                if ((op as any).tags.some((tag: string) => excludeTags.includes(tag))) {
+
+              if (!shouldExclude && excludeTags && Array.isArray(operation.tags)) {
+                if (operation.tags.some((tag: string) => excludeTags.includes(tag))) {
                   shouldExclude = true;
                 }
               }
 
-              if (!shouldExclude) {
-                keepOps[method] = op;
+              if (shouldExclude) {
+                delete keepPathItem[method];
               }
             }
-            if (Object.keys(keepOps).length > 0) filtered.paths[path] = keepOps;
+
+            if (hasOperation(keepPathItem) || Boolean(keepPathItem.parameters?.length)) {
+              filtered.paths[path] = keepPathItem;
+            }
           }
 
           const shouldPrune = specPrune ?? true;
@@ -232,7 +289,7 @@ export async function createWorker(env?: WorkerEnv, options?: WorkerOptions): Pr
 
 // Core worker class that manages handlers and their lifecycle
 export class AppWorker {
-  private app: Hono<{ Bindings: WorkerEnv }>;
+  private app: Hono<HonoBindingsEnv>;
   private handlers: AppHandler[] = [];
   private config: AppConfig;
   private workerName: string;
@@ -241,7 +298,7 @@ export class AppWorker {
   private initialized = false;
   private startupStack = new LogStack();
 
-  constructor(app: Hono<{ Bindings: WorkerEnv }>, config: AppConfig, workerName: string, basePath: string, options?: WorkerOptions) {
+  constructor(app: Hono<HonoBindingsEnv>, config: AppConfig, workerName: string, basePath: string, options?: WorkerOptions) {
     this.app = app;
     this.config = config;
     this.workerName = workerName;
@@ -277,7 +334,7 @@ export class AppWorker {
 
   // Cloudflare Workers export a single queue() per worker, but a worker can consume multiple queues.
   // This dispatcher routes each batch to the correct handler based on batch.queue.
-  getQueueFunction(): ((batch: any, env: WorkerEnv, ctx: any) => Promise<void>) | undefined {
+  getQueueFunction(): ((batch: QueueBatch, env: WorkerEnv, ctx: WorkerExecutionCtx) => Promise<void>) | undefined {
     const queueHandlers = this.handlers.filter(h => typeof h.queue === 'function');
 
     if (queueHandlers.length === 0) {
@@ -293,15 +350,17 @@ export class AppWorker {
       getLogger().warn(`Multiple handlers with queue() found but none declare handlesQueue(). Using first one: ${queueHandlers[0]!.name}`);
     }
 
-    return async (batch: any, env: WorkerEnv, ctx: any) => {
+    return async (batch: QueueBatch, env: WorkerEnv, ctx: WorkerExecutionCtx) => {
       await this.initialize(env);
 
       // Build configured queue name list from config for this worker
       let configuredQueues: string[] = [];
       try {
-        const bindings = getWorkerQueueBindings(this.config, this.workerName) || {} as any;
+        const bindings = getWorkerQueueBindings(this.config, this.workerName);
         const consumers = bindings.consumers ?? [];
-        configuredQueues = consumers.map((c: any) => c?.queue).filter(Boolean) as string[];
+        configuredQueues = consumers
+          .map((consumer) => consumer.queue)
+          .filter((queueName): queueName is string => typeof queueName === 'string' && queueName.length > 0);
       } catch { }
 
       // Try matcher-based dispatch
@@ -367,14 +426,14 @@ export class AppWorker {
     };
   }
 
-  getScheduledFunction(): ((event: any, env: WorkerEnv, ctx: any) => Promise<void>) | undefined {
+  getScheduledFunction(): ((event: ScheduledEvent, env: WorkerEnv, ctx: WorkerExecutionCtx) => Promise<void>) | undefined {
     const scheduledHandlers = this.handlers.filter(h => typeof h.scheduled === 'function');
 
     if (scheduledHandlers.length === 0) {
       return undefined;
     }
 
-    return async (event: any, env: WorkerEnv, ctx: any) => {
+    return async (event: ScheduledEvent, env: WorkerEnv, ctx: WorkerExecutionCtx) => {
       await this.initialize(env);
 
       const promises = scheduledHandlers.map(async (handler) => {
@@ -432,20 +491,13 @@ export class AppWorker {
 
       if (handler.name !== 'api-docs') {
         (() => {
-          const specApp = new Hono<{ Bindings: WorkerEnv }>();
+          const specApp = new Hono<HonoBindingsEnv>();
           const routerBase = getRouterBasePath(this.config);
           const prefix = routerBase === '/' ? handlerPath : `${routerBase}${handlerPath}`;
           specApp.route(prefix, handler.routes);
 
-          let componentSchemas = {};
-          if (handler.componentSchemas) {
-            componentSchemas = handler.componentSchemas;
-          }
-
-          let handlerSecuritySchemes = {};
-          if (handler.securitySchemes) {
-            handlerSecuritySchemes = handler.securitySchemes;
-          }
+          const componentSchemas = (handler.componentSchemas || {}) as SchemaMap;
+          const handlerSecuritySchemes = (handler.securitySchemes || {}) as SecuritySchemeMap;
 
           const specOptions = {
             documentation: {
@@ -459,7 +511,7 @@ export class AppWorker {
                 securitySchemes: handlerSecuritySchemes,
               },
             },
-          } as any;
+          };
 
           const specDefs = this.options?.openapi
             ? (Array.isArray(this.options.openapi) ? this.options.openapi : [this.options.openapi])
@@ -468,32 +520,47 @@ export class AppWorker {
           for (const specDef of specDefs) {
             const specPath = specDef.path || '/openapi';
             this.app.get(`${handlerPath}${specPath}`, async (c) => {
-              const full = await generateSpecs(specApp, specOptions, undefined, c);
+              const full = await generateSpecs(specApp, specOptions, undefined, c) as OpenAPIV3.Document;
               const { excludeEndpoint, excludeTags, pruneComponents: specPrune, securitySchemes } = specDef;
               const hasExclusions = !!excludeEndpoint || (!!excludeTags && excludeTags.length > 0);
 
               let finalSpec = full;
 
               if (hasExclusions) {
-                const filtered: any = { ...full, paths: {} };
-                for (const [path, ops] of Object.entries(full.paths || {})) {
-                  const keepOps: any = {};
-                  for (const [method, op] of Object.entries(ops as any)) {
+                const filtered: OpenAPIV3.Document = { ...full, paths: {} };
+                for (const [path, pathItemOrRef] of Object.entries(full.paths ?? {}) as Array<[string, OpenAPIV3.PathItemObject | OpenAPIV3.ReferenceObject]>) {
+                  if (!pathItemOrRef) continue;
+
+                  if (!isPathItemObject(pathItemOrRef)) {
+                    filtered.paths[path] = pathItemOrRef;
+                    continue;
+                  }
+
+                  const keepPathItem: OpenAPIV3.PathItemObject = { ...pathItemOrRef };
+
+                  for (const method of OPENAPI_METHODS) {
+                    const operation = pathItemOrRef[method];
+                    if (!operation) continue;
+
                     let shouldExclude = false;
-                    if (excludeEndpoint && excludeEndpoint(path, method, op)) {
+                    if (excludeEndpoint && excludeEndpoint(path, method, operation)) {
                       shouldExclude = true;
                     }
-                    if (!shouldExclude && excludeTags && Array.isArray((op as any).tags)) {
-                      if ((op as any).tags.some((tag: string) => excludeTags.includes(tag))) {
+
+                    if (!shouldExclude && excludeTags && Array.isArray(operation.tags)) {
+                      if (operation.tags.some((tag: string) => excludeTags.includes(tag))) {
                         shouldExclude = true;
                       }
                     }
 
-                    if (!shouldExclude) {
-                      keepOps[method] = op;
+                    if (shouldExclude) {
+                      delete keepPathItem[method];
                     }
                   }
-                  if (Object.keys(keepOps).length > 0) filtered.paths[path] = keepOps;
+
+                  if (hasOperation(keepPathItem) || Boolean(keepPathItem.parameters?.length)) {
+                    filtered.paths[path] = keepPathItem;
+                  }
                 }
 
                 const shouldPrune = specPrune ?? true;
@@ -587,7 +654,7 @@ export class AppWorker {
     }
   }
 
-  getApp(): Hono<{ Bindings: WorkerEnv }> {
+  getApp(): Hono<HonoBindingsEnv> {
     return this.app;
   }
 
@@ -597,18 +664,22 @@ export class AppWorker {
     const queueFunction = this.getQueueFunction();
     const scheduledFunction = this.getScheduledFunction();
 
-    const workerExport: any = {
-      async fetch(request: any, env: WorkerEnv, ctx: any) {
+    const workerExport: {
+      fetch: (request: RequestWithCf, env: WorkerEnv, ctx: WorkerExecutionCtx) => Promise<Response>;
+      queue?: (batch: QueueBatch, env: WorkerEnv, ctx: WorkerExecutionCtx) => Promise<void>;
+      scheduled?: (event: ScheduledEvent, env: WorkerEnv, ctx: WorkerExecutionCtx) => Promise<void>;
+    } = {
+      async fetch(request: RequestWithCf, env: WorkerEnv, ctx: WorkerExecutionCtx) {
         try {
           // Merge global and worker-specific vars into env
-          const globalVars = (self.config as any).vars || {};
+          const globalVars = self.config.vars || {};
           const workerVars = (self.config.workers?.[self.workerName]?.vars) || {};
           const mergedEnv = { ...env, ...globalVars, ...workerVars } as WorkerEnv;
 
           // Inject CF location for pgEdge geo-routing
           // Header takes priority: request.cf reflects the worker's colo, not the original client
-          const cfContinent = request.headers?.get?.('X-CF-Continent') || (request as any).cf?.continent;
-          if (cfContinent) (mergedEnv as any).__cfContinent = cfContinent;
+          const cfContinent = request.headers?.get?.('X-CF-Continent') || request.cf?.continent;
+          if (cfContinent) mergedEnv.__cfContinent = cfContinent;
 
           await self.initialize(mergedEnv);
           return await self.app.fetch(request, mergedEnv, ctx);
@@ -629,8 +700,8 @@ export class AppWorker {
     };
 
     if (queueFunction) {
-      workerExport.queue = async (batch: any, env: WorkerEnv, ctx: any) => {
-        const globalVars = (self.config as any).vars || {};
+      workerExport.queue = async (batch: QueueBatch, env: WorkerEnv, ctx: WorkerExecutionCtx) => {
+        const globalVars = self.config.vars || {};
         const workerVars = (self.config.workers?.[self.workerName]?.vars) || {};
         const mergedEnv = { ...env, ...globalVars, ...workerVars } as WorkerEnv;
         await queueFunction(batch, mergedEnv, ctx);
@@ -638,8 +709,8 @@ export class AppWorker {
     }
 
     if (scheduledFunction) {
-      workerExport.scheduled = async (event: any, env: WorkerEnv, ctx: any) => {
-        const globalVars = (self.config as any).vars || {};
+      workerExport.scheduled = async (event: ScheduledEvent, env: WorkerEnv, ctx: WorkerExecutionCtx) => {
+        const globalVars = self.config.vars || {};
         const workerVars = (self.config.workers?.[self.workerName]?.vars) || {};
         const mergedEnv = { ...env, ...globalVars, ...workerVars } as WorkerEnv;
         await scheduledFunction(event, mergedEnv, ctx);
@@ -662,7 +733,7 @@ export function createCloudflareWorker(
   options?: WorkerOptions
 ) {
   return {
-    async fetch(request: Request, env: WorkerEnv, ctx: any): Promise<Response> {
+    async fetch(request: Request, env: WorkerEnv, ctx: WorkerExecutionCtx): Promise<Response> {
       try {
         const workerEnv = {
           ...env,
@@ -671,8 +742,9 @@ export function createCloudflareWorker(
 
         // Inject CF location for pgEdge geo-routing
         // Header takes priority: request.cf reflects the worker's colo, not the original client
-        const cfContinent = request.headers?.get?.('X-CF-Continent') || (request as any).cf?.continent;
-        if (cfContinent) (workerEnv as any).__cfContinent = cfContinent;
+        const requestWithCf = request as RequestWithCf;
+        const cfContinent = request.headers?.get?.('X-CF-Continent') || requestWithCf.cf?.continent;
+        if (cfContinent) workerEnv.__cfContinent = cfContinent;
 
         const worker = await createWorker(workerEnv, options);
 
@@ -696,7 +768,7 @@ export function createCloudflareWorker(
       }
     },
 
-    async queue(batch: any, env: WorkerEnv, ctx: any): Promise<void> {
+    async queue(batch: QueueBatch, env: WorkerEnv, ctx: WorkerExecutionCtx): Promise<void> {
       try {
         const workerEnv = {
           ...env,
@@ -724,7 +796,7 @@ export function createCloudflareWorker(
       }
     },
 
-    async scheduled(event: any, env: WorkerEnv, ctx: any): Promise<void> {
+    async scheduled(event: ScheduledEvent, env: WorkerEnv, ctx: WorkerExecutionCtx): Promise<void> {
       try {
         const workerEnv = {
           ...env,
