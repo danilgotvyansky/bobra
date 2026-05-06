@@ -9,7 +9,8 @@ import { getLogger } from '@danylohotvianskyi/bobra-framework/logging';
 import { createPublicApiToken } from '@danylohotvianskyi/bobra-framework/batteries/auth';
 import { insertToken } from './db-utils';
 import { createTokenRequestSchema, CreateTokenResponseData } from './schemas';
-import type { InferInput } from 'valibot';
+import { parse, type InferInput } from 'valibot';
+import { apiTokenSchema } from '@example-app/shared-utils/src/openapi';
 
 export async function createToken(body: InferInput<typeof createTokenRequestSchema>, env: WorkerEnv): Promise<Response> {
   try {
@@ -24,14 +25,15 @@ export async function createToken(body: InferInput<typeof createTokenRequestSche
     }
 
     const { token, record } = await createPublicApiToken({
-      name: body.name,
+      name: body.name ?? undefined,
       ...(expiresAtTimestamp !== undefined && { expiresAt: expiresAtTimestamp }),
-      ipAddresses: body.ipAddresses
+      ipAddresses: Array.isArray(body.ipAddresses) ? body.ipAddresses : undefined
     });
 
-    await insertToken(env, record as any);
+    const validatedRecord = parse(apiTokenSchema, record);
+    await insertToken(env, validatedRecord);
 
-    const res: CreateTokenResponseData = { success: true, uid: record.uid, token };
+    const res: CreateTokenResponseData = { uid: record.uid, token };
     return new Response(JSON.stringify(res), { headers: { 'Content-Type': 'application/json' }, status: 201 });
   } catch (error) {
     getLogger().error('Error creating API token', error instanceof Error ? error : new Error(String(error)));

@@ -9,6 +9,7 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "moduleResolution": "bundler",
+    "preserveSymlinks": true,
     "outDir": "./dist",
     "declaration": true
   },

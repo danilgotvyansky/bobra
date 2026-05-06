@@ -1,87 +1,200 @@
 import {
-  convertBooleanForDb,
+  DrizzleD1Client,
+  DrizzlePgClient,
   getDatabaseContext,
   getDb,
   isSQLite,
   type AppEnvBindings
 } from '@danylohotvianskyi/bobra-framework/db';
-import { eq, and } from 'drizzle-orm';
-import { schema } from '../../../shared-utils/src/db';
+import { eq } from 'drizzle-orm';
+import { schema } from '@example-app/shared-utils/src/db';
 import type { APIToken } from './schemas';
 
+type PgTokenInsert = typeof schema.tokens.$inferInsert;
+type SqliteTokenInsert = typeof schema.tokensSqlite.$inferInsert;
+
+function normalizeTimestamp(value: Date | string | null): string | null {
+  if (value === null) {
+    return null;
+  }
+
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return typeof value === 'string' ? value : null;
+  }
+
+  return date.toISOString();
+}
+
+function normalizeIpAddresses(value: unknown): string[] | null {
+  if (value === null) {
+    return null;
+  }
+
+  if (Array.isArray(value)) {
+    return value.filter((entry): entry is string => typeof entry === 'string');
+  }
+
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) {
+      return parsed.filter((entry): entry is string => typeof entry === 'string');
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
 export async function insertToken(env: AppEnvBindings, record: APIToken) {
-  const db = getDb(env, schema) as any;
   const ctx = getDatabaseContext(env, schema);
-  const target = isSQLite(ctx) ? schema.tokensSqlite : schema.tokens;
-  const values: any = {
+  if (isSQLite(ctx)) {
+    const db = getDb(env, schema) as DrizzleD1Client;
+    const values: SqliteTokenInsert = {
+      uid: record.uid,
+      name: record.name || null,
+      tokenHash: record.tokenHash,
+      tokenSalt: record.tokenSalt,
+      ipAddresses: record.ipAddresses ? JSON.stringify(record.ipAddresses) : null,
+      initToken: record.initToken ? 1 : 0,
+      ...(record.createdAt ? { createdAt: new Date(record.createdAt).toISOString() } : {}),
+      ...(record.lastUsedAt ? { lastUsedAt: new Date(record.lastUsedAt).toISOString() } : {}),
+      ...(record.expiresAt ? { expiresAt: new Date(record.expiresAt).toISOString() } : {}),
+    };
+    return await db.insert(schema.tokensSqlite).values(values);
+  }
+
+  const db = getDb(env, schema) as DrizzlePgClient;
+  const values: PgTokenInsert = {
     uid: record.uid,
     name: record.name || null,
     tokenHash: record.tokenHash,
     tokenSalt: record.tokenSalt,
-    ipAddresses: record.ipAddresses ? (isSQLite(ctx) ? JSON.stringify(record.ipAddresses) : record.ipAddresses) : null,
-    initToken: record.initToken ? convertBooleanForDb(true, ctx) : convertBooleanForDb(false, ctx)
+    ipAddresses: record.ipAddresses ?? null,
+    initToken: Boolean(record.initToken),
+    ...(record.createdAt ? { createdAt: new Date(record.createdAt) } : {}),
+    ...(record.lastUsedAt ? { lastUsedAt: new Date(record.lastUsedAt) } : {}),
+    ...(record.expiresAt ? { expiresAt: new Date(record.expiresAt) } : {}),
   };
-
-  if (record.createdAt) {
-    values.createdAt = isSQLite(ctx) ? new Date(record.createdAt).toISOString() : new Date(record.createdAt);
-  }
-  if (record.lastUsedAt) {
-    values.lastUsedAt = isSQLite(ctx) ? new Date(record.lastUsedAt).toISOString() : new Date(record.lastUsedAt);
-  }
-  if (record.expiresAt) {
-    values.expiresAt = isSQLite(ctx) ? new Date(record.expiresAt).toISOString() : new Date(record.expiresAt);
-  }
-
-  return await db.insert(target).values(values);
+  return await db.insert(schema.tokens).values(values);
 }
 
 export async function getToken(env: AppEnvBindings, uid: string) {
-  const db = getDb(env, schema) as any;
   const ctx = getDatabaseContext(env, schema);
-  const target = isSQLite(ctx) ? schema.tokensSqlite : schema.tokens;
-  const [token] = await db.select({
-    uid: target.uid,
-    name: target.name,
-    ipAddresses: target.ipAddresses,
-    createdAt: target.createdAt,
-    lastUsedAt: target.lastUsedAt,
-    expiresAt: target.expiresAt
-  }).from(target).where(eq(target.uid, uid));
+  const [token] = isSQLite(ctx)
+    ? await (getDb(env, schema) as DrizzleD1Client)
+      .select({
+        uid: schema.tokensSqlite.uid,
+        name: schema.tokensSqlite.name,
+        ipAddresses: schema.tokensSqlite.ipAddresses,
+        createdAt: schema.tokensSqlite.createdAt,
+        lastUsedAt: schema.tokensSqlite.lastUsedAt,
+        expiresAt: schema.tokensSqlite.expiresAt,
+      })
+      .from(schema.tokensSqlite)
+      .where(eq(schema.tokensSqlite.uid, uid))
+    : await (getDb(env, schema) as DrizzlePgClient)
+      .select({
+        uid: schema.tokens.uid,
+        name: schema.tokens.name,
+        ipAddresses: schema.tokens.ipAddresses,
+        createdAt: schema.tokens.createdAt,
+        lastUsedAt: schema.tokens.lastUsedAt,
+        expiresAt: schema.tokens.expiresAt,
+      })
+      .from(schema.tokens)
+      .where(eq(schema.tokens.uid, uid));
 
   if (!token) throw new Error('Token not found');
 
-  return token;
+  const createdAt = normalizeTimestamp(token.createdAt);
+  const expiresAt = normalizeTimestamp(token.expiresAt);
+  if (!createdAt || !expiresAt) {
+    throw new Error('Invalid token timestamp format');
+  }
+
+  return {
+    ...token,
+    createdAt,
+    expiresAt,
+    lastUsedAt: normalizeTimestamp(token.lastUsedAt),
+    ipAddresses: normalizeIpAddresses(token.ipAddresses),
+  };
 }
 
 export async function deleteToken(env: AppEnvBindings, tokenUid: string) {
-  const db = getDb(env, schema) as any;
   const ctx = getDatabaseContext(env, schema);
-  const target = isSQLite(ctx) ? schema.tokensSqlite : schema.tokens;
-  const tokenExists = await db.select({ uid: target.uid })
-    .from(target)
-    .where(and(eq(target.uid, tokenUid)))
+  if (isSQLite(ctx)) {
+    const db = getDb(env, schema) as DrizzleD1Client;
+    const tokenExists = await db.select({ uid: schema.tokensSqlite.uid })
+      .from(schema.tokensSqlite)
+      .where(eq(schema.tokensSqlite.uid, tokenUid))
+      .limit(1);
+    if (tokenExists.length === 0) {
+      return { found: false };
+    }
+    await db.delete(schema.tokensSqlite)
+      .where(eq(schema.tokensSqlite.uid, tokenUid));
+    return { found: true };
+  }
+
+  const db = getDb(env, schema) as DrizzlePgClient;
+  const tokenExists = await db.select({ uid: schema.tokens.uid })
+    .from(schema.tokens)
+    .where(eq(schema.tokens.uid, tokenUid))
     .limit(1);
   if (tokenExists.length === 0) {
     return { found: false };
   }
-  await db.delete(target)
-    .where(eq(target.uid as any, tokenUid));
+  await db.delete(schema.tokens)
+    .where(eq(schema.tokens.uid, tokenUid));
   return { found: true };
 }
 
 export async function listTokens(env: AppEnvBindings) {
-  const db = getDb(env, schema) as any;
   const ctx = getDatabaseContext(env, schema);
-  const target = isSQLite(ctx) ? schema.tokensSqlite : schema.tokens;
-  const rows = await db.select({
-    uid: target.uid,
-    name: target.name,
-    ipAddresses: target.ipAddresses,
-    createdAt: target.createdAt,
-    lastUsedAt: target.lastUsedAt,
-    expiresAt: target.expiresAt,
-    initToken: target.initToken
-  })
-    .from(target);
-  return rows;
+  if (isSQLite(ctx)) {
+    const db = getDb(env, schema) as DrizzleD1Client;
+    const tokens = await db.select({
+      uid: schema.tokensSqlite.uid,
+      name: schema.tokensSqlite.name,
+      ipAddresses: schema.tokensSqlite.ipAddresses,
+      createdAt: schema.tokensSqlite.createdAt,
+      lastUsedAt: schema.tokensSqlite.lastUsedAt,
+      expiresAt: schema.tokensSqlite.expiresAt,
+      initToken: schema.tokensSqlite.initToken,
+    }).from(schema.tokensSqlite);
+
+    return tokens.map((token) => ({
+      ...token,
+      createdAt: normalizeTimestamp(token.createdAt),
+      lastUsedAt: normalizeTimestamp(token.lastUsedAt),
+      expiresAt: normalizeTimestamp(token.expiresAt),
+      ipAddresses: normalizeIpAddresses(token.ipAddresses),
+    }));
+  }
+
+  const db = getDb(env, schema) as DrizzlePgClient;
+  const tokens = await db.select({
+    uid: schema.tokens.uid,
+    name: schema.tokens.name,
+    ipAddresses: schema.tokens.ipAddresses,
+    createdAt: schema.tokens.createdAt,
+    lastUsedAt: schema.tokens.lastUsedAt,
+    expiresAt: schema.tokens.expiresAt,
+    initToken: schema.tokens.initToken,
+  }).from(schema.tokens);
+
+  return tokens.map((token) => ({
+    ...token,
+    createdAt: normalizeTimestamp(token.createdAt),
+    lastUsedAt: normalizeTimestamp(token.lastUsedAt),
+    expiresAt: normalizeTimestamp(token.expiresAt),
+    ipAddresses: normalizeIpAddresses(token.ipAddresses),
+  }));
 }

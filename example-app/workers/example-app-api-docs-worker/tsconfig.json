@@ -7,6 +7,7 @@
     "jsx": "react-jsx",
     "module": "es2022",
     "moduleResolution": "Bundler",
+    "preserveSymlinks": true,
     "types": [
       "@cloudflare/workers-types"
     ],
