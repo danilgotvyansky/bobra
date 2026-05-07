@@ -23,6 +23,19 @@ const TRANSIENT_PG_SQLSTATE_CODES = new Set([
   '57P03',
 ]);
 
+const TRANSIENT_CONNECTION_MESSAGE_PATTERNS = [
+  'connection terminated unexpectedly',
+  'connection ended unexpectedly',
+  'server closed the connection unexpectedly',
+  'client has encountered a connection error and is not queryable',
+  'timeout exceeded when trying to connect',
+  'connection timeout',
+  'failed to acquire a connection from the pool',
+  'server connection attempt failed',
+  'connecting to database via cloudflare tunnel failed',
+  '502 bad gateway',
+];
+
 export function toError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
 }
@@ -49,6 +62,11 @@ export function isTransientConnectionOrUnavailableError(error: unknown): boolean
   while (currentError && typeof currentError === 'object' && !visited.has(currentError)) {
     visited.add(currentError);
 
+    const errorMessage = readErrorMessage(currentError).toLowerCase();
+    if (TRANSIENT_CONNECTION_MESSAGE_PATTERNS.some((pattern) => errorMessage.includes(pattern))) {
+      return true;
+    }
+
     const errorCode = readErrorCode(currentError);
     if (errorCode) {
       if (TRANSIENT_NODE_ERROR_CODES.has(errorCode)) return true;
@@ -56,9 +74,9 @@ export function isTransientConnectionOrUnavailableError(error: unknown): boolean
       if (errorCode.startsWith('08')) return true;
       if (TRANSIENT_PG_SQLSTATE_CODES.has(errorCode)) return true;
       if (errorCode === '58000') {
-        const message = readErrorMessage(currentError).toLowerCase();
-        const isHyperdriveTransient = message.includes('pool acquisition')
-          || message.includes('server connection attempt failed');
+        const isHyperdriveTransient = errorMessage.includes('pool acquisition')
+          || errorMessage.includes('failed to acquire a connection from the pool')
+          || errorMessage.includes('server connection attempt failed');
         if (isHyperdriveTransient) return true;
       }
     }

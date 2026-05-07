@@ -36,6 +36,6 @@ dependencies:
   "concurrently": "^9.2.0"
   "pnpm": "^10.15.1"
 # For local development of the framework, you can uncomment the following lines
-pnpm:
-  overrides:
-    "@danylohotvianskyi/bobra-framework": "file:../framework"
+# pnpm:
+#   overrides:
+#     "@danylohotvianskyi/bobra-framework": "file:../framework"

@@ -77,6 +77,12 @@ describe('db/client failover', () => {
     };
 
     expect(isTransientConnectionOrUnavailableError(err)).toBe(true);
+    expect(isTransientConnectionOrUnavailableError(new Error('Connection terminated unexpectedly'))).toBe(true);
+    expect(
+      isTransientConnectionOrUnavailableError(
+        new Error('Connecting to database via Cloudflare Tunnel failed: 502 Bad Gateway')
+      )
+    ).toBe(true);
     expect(isTransientConnectionOrUnavailableError({ code: '23505', message: 'duplicate key' })).toBe(false);
   });
 
@@ -155,6 +161,49 @@ describe('db/client failover', () => {
     const result = await pool.query('select 1');
     expect(result.rows).toHaveLength(1);
     expect(calls).toEqual(['eu-connect', 'eu-query', 'us-connect', 'us-query']);
+  });
+
+  it('falls back on pg connection termination errors without an error code', async () => {
+    const calls: string[] = [];
+    const options: PgFailoverOptions = {
+      enabled: true,
+      connectionTimeoutMs: 2000,
+      warnLogging: false,
+    };
+
+    const candidates: PostgresCandidate[] = [
+      { bindingName: 'POSTGRES_US', binding: { connectionString: 'postgres://us' }, location: 'us' },
+      { bindingName: 'POSTGRES_EU', binding: { connectionString: 'postgres://eu' }, location: 'eu' },
+    ];
+
+    const pool = new FailoverPgPool(
+      candidates,
+      options,
+      () => createMockPoolAdapter(async () => {
+        throw new Error('pool connect should not be used before the candidate is proven healthy');
+      }),
+      (candidate) => {
+        if (candidate.bindingName === 'POSTGRES_US') {
+          return createMockDirectClient(async () => {
+            calls.push('us-query');
+            throw new Error('Connection terminated unexpectedly');
+          }, async () => {
+            calls.push('us-connect');
+          });
+        }
+
+        return createMockDirectClient(async () => {
+          calls.push('eu-query');
+          return createQueryResult([{ ok: 1 }]);
+        }, async () => {
+          calls.push('eu-connect');
+        });
+      },
+    );
+
+    const result = await pool.query('select 1');
+    expect(result.rows).toHaveLength(1);
+    expect(calls).toEqual(['us-connect', 'us-query', 'eu-connect', 'eu-query']);
   });
 
   it('does not fallback on non-transient connect errors', async () => {
