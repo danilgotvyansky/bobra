@@ -149,6 +149,16 @@ postgres:
 2.  **.dev.vars** or **.env**: Used during local development.
 3.  **Hardcoded fallbacks**: If specified.
 
+### pgEdge Runtime Failover Vars
+
+When using PostgreSQL with multiple pgEdge candidates, you can tune runtime failover with:
+
+- `PGEDGE_FAILOVER_ENABLED` (default: `true` when more than one candidate exists)
+- `PGEDGE_FAILOVER_CONNECTION_TIMEOUT_MS` (default: `2000`)
+- `PGEDGE_FAILOVER_WARN_LOGGING` (default: `true`)
+
+These are runtime env vars (for example Cloudflare vars/secrets), not `config.yml` keys.
+
 ## Synchronizing Configs
 
 Bobra uses the `config.yml` to generate the necessary `wrangler.production.jsonc` files for each worker.

@@ -212,7 +212,8 @@ export function generateWranglerConfig<
         PGEDGE_LOCATIONS: JSON.stringify(config.pgEdge?.locations || []),
         ...(config.deployment_context && { DEPLOYMENT_CONTEXT: config.deployment_context }),
         ...config.vars,
-        ...routerConfig?.vars
+        ...routerConfig?.vars,
+        PGEDGE_FAILOVER_ENABLED: config.pgEdge?.connection_fallback ?? true
       },
       // observability: {
       //   ...(routerObservability?.traces ? {
@@ -336,7 +337,8 @@ export function generateWranglerConfig<
         PGEDGE_LOCATIONS: JSON.stringify(config.pgEdge?.locations || []),
         ...(config.deployment_context && { DEPLOYMENT_CONTEXT: config.deployment_context }),
         ...config.vars,
-        ...workerConfig?.vars
+        ...workerConfig?.vars,
+        PGEDGE_FAILOVER_ENABLED: config.pgEdge?.connection_fallback ?? true
       },
       // observability: {
       //   ...(workerObservability?.traces ? {

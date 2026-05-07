@@ -122,6 +122,7 @@ export function flattenHyperdriveConfigs(postgresConfig: HyperdrivePostgresConfi
 export interface PgEdgeConfig {
   enabled: boolean;
   locations: string[];
+  connection_fallback?: boolean;
 }
 
 export interface CloudflareRoute {
@@ -234,6 +235,7 @@ export const defaultConfig: AppConfig = {
   pgEdge: {
     enabled: false,
     locations: [],
+    connection_fallback: true,
   },
   db_engine: 'postgres',
   vars: {},
@@ -268,7 +270,10 @@ export function parseConfig(yamlContent: string, env?: Record<string, unknown>):
         ...parsed.server,
       },
       db_engine: parsed.db_engine || defaultConfig.db_engine,
-      pgEdge: parsed.pgEdge || defaultConfig.pgEdge,
+      pgEdge: {
+        ...defaultConfig.pgEdge,
+        ...parsed.pgEdge,
+      },
       logging: parsed.logging,
       vars: parsed.vars || {},
       workers: parsed.workers || {},
