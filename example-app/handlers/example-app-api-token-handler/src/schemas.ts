@@ -6,9 +6,9 @@
  */
 
 import * as v from 'valibot';
-import type { ObjectSchema, IntersectSchema, InferOutput, InferInput } from 'valibot';
+import type { InferOutput, InferInput } from 'valibot';
 import { toJsonSchemaDefs } from '@valibot/to-json-schema';
-import { apiTokenSchema } from '../../../shared-utils/src/openapi';
+import { apiTokenSchema } from '@example-app/shared-utils/src/openapi';
 import { simpleSuccessResponseSchema, errorResponseSchema } from '@danylohotvianskyi/bobra-framework/batteries/openapi';
 
 export const tokenUidParamsSchema = v.object({
@@ -17,17 +17,27 @@ export const tokenUidParamsSchema = v.object({
 
 export const safeApiTokenSchema = v.omit(apiTokenSchema, ['tokenHash', 'tokenSalt', 'initToken']);
 
-export const createTokenRequestSchema: ObjectSchema<any, any> = v.partial(v.pick(apiTokenSchema, ['name', 'ipAddresses', 'expiresAt']));
+// Internal list schema includes initToken to allow filtering before returning SafeAPIToken.
+export const apiTokenListRowSchema = v.intersect([
+  safeApiTokenSchema,
+  v.object({
+    initToken: v.union([v.boolean(), v.number()]),
+  }),
+]);
 
-export const createTokenResponseDataSchema: IntersectSchema<any, any> = v.intersect([
-  v.partial(v.pick(apiTokenSchema, ['uid', 'name', 'ipAddresses', 'createdAt', 'lastUsedAt', 'expiresAt'])),
+export const apiTokenListRowsSchema = v.array(apiTokenListRowSchema);
+
+export const createTokenRequestSchema = v.partial(v.pick(apiTokenSchema, ['name', 'expiresAt']));
+
+export const createTokenResponseDataSchema = v.intersect([
+  v.partial(v.pick(apiTokenSchema, ['uid', 'name', 'createdAt', 'lastUsedAt', 'expiresAt'])),
   v.object({
     token: v.string(),
   })
 ]);
 
 export type TokenUidParams = InferInput<typeof tokenUidParamsSchema>;
-export type SafeAPIToken = InferInput<typeof safeApiTokenSchema>;
+export type SafeAPIToken = InferOutput<typeof safeApiTokenSchema>;
 export type CreateTokenRequest = InferInput<typeof createTokenRequestSchema>;
 export type CreateTokenResponseData = InferOutput<typeof createTokenResponseDataSchema>;
 export type APIToken = InferOutput<typeof apiTokenSchema>;

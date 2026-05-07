@@ -96,6 +96,43 @@ When using PostgreSQL with [pgEdge](https://www.pgedge.com/), Bobra can automati
 ### Location Decisions
 The `getDb(env)` utility uses Cloudflare's `cfInfo` (colo and continent) to determine the nearest database instance.
 
+### Runtime Failover (pgEdge)
+
+For pgEdge setups with multiple resolved Postgres candidates, Bobra performs runtime failover at the PostgreSQL driver boundary:
+
+1. Build ordered candidates: router-preferred location first, then remaining locations.
+2. Resolve each location binding using existing role-aware binding rules.
+3. Create lazy `pg.Pool` instances per candidate.
+4. Execute queries/connection acquisition on the first candidate and retry next candidates only on transient connection/location-unavailable errors.
+
+This keeps the fast path local: when the primary location is healthy, requests stay on that location and do not fan out.
+
+#### What triggers failover
+
+Failover retries are limited to transient connectivity/unavailable classes:
+
+- Node/network codes: `ECONNRESET`, `ECONNREFUSED`, `ETIMEDOUT`, `ENOTFOUND`, `EAI_AGAIN`, `EPIPE`, `UND_ERR_*`
+- SQLSTATE class `08*`
+- SQLSTATE `57P01`, `57P02`, `57P03`
+- Hyperdrive-like SQLSTATE `58000` when message indicates transient pool/connection acquisition failure (for example `pool acquisition` or `server connection attempt failed`)
+
+Regular SQL/query errors (syntax, constraint violations, etc.) do not trigger failover.
+
+#### Transactions and failover
+
+Fallback is allowed only during transaction acquisition (`connect` stage). Once a transaction starts on one candidate, Bobra does not fail over mid-transaction.
+
+#### Failover env toggles
+
+- `PGEDGE_FAILOVER_ENABLED`:
+  default `true` when more than one candidate is available
+- `PGEDGE_FAILOVER_CONNECTION_TIMEOUT_MS`:
+  default `2000` ms for candidate pool connection attempts in failover mode
+- `PGEDGE_FAILOVER_WARN_LOGGING`:
+  default `true`; warn logs on every runtime fallback to the next candidate
+
+If all candidates fail, Bobra throws the last error and emits a summary error log with attempted bindings.
+
 ### Role-Aware Binding Selection
 
 Bobra supports selecting a Postgres binding role per query path, while keeping location routing.

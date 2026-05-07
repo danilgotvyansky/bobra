@@ -1,13 +1,14 @@
 import { Hono } from 'hono';
 import { describeRoute } from 'hono-openapi';
 import { vValidator } from '@hono/valibot-validator';
-import { InferInput } from 'valibot';
+import { parse } from 'valibot';
 import { initializeLogger, getLogger } from '@danylohotvianskyi/bobra-framework/logging';
 import { ensureApiToken } from '@danylohotvianskyi/bobra-framework/middleware';
 import type { AppHandler, WorkerEnv } from '@danylohotvianskyi/bobra-framework/core';
 import { getDatabaseContext } from '@danylohotvianskyi/bobra-framework/db';
-import { schema } from '../../../shared-utils/src/db';
+import { schema } from '@example-app/shared-utils/src/db';
 import {
+  apiTokenListRowsSchema,
   createTokenRequestSchema,
   componentSchemas,
   tokenUidParamsSchema
@@ -19,15 +20,16 @@ import {
 } from '@danylohotvianskyi/bobra-framework/batteries/openapi';
 import { deleteToken, getToken, listTokens } from './db-utils';
 import { createToken } from './service';
+import { TokenValidationProvider } from '@danylohotvianskyi/bobra-framework';
 
 const routes = new Hono()
   .use('*', ensureApiToken({
-    getTokenValidationProvider: (c: any) => {
+    getTokenValidationProvider: (c) => {
       const ctx = getDatabaseContext(c.env, schema);
       return {
         ctx,
         schema
-      } as any;
+      } as TokenValidationProvider;
     }
   }))
 
@@ -46,10 +48,10 @@ const routes = new Hono()
         },
       },
     }),
-    async (c: any) => {
+    async (c) => {
       const env = c.env as WorkerEnv;
-      const tokens = await listTokens(env);
-      const filtered = (tokens as any[])
+      const tokens = parse(apiTokenListRowsSchema, await listTokens(env));
+      const filtered = tokens
         .filter(t => !(t.initToken === true || t.initToken === 1))
         .map(t => {
           const { initToken, ...rest } = t;
@@ -78,13 +80,12 @@ const routes = new Hono()
       },
     }),
     vValidator('param', tokenUidParamsSchema),
-    async (c: any) => {
+    async (c) => {
       try {
         const env = c.env as WorkerEnv;
         const tokenUid = c.req.valid('param').tokenUid;
         const token = await getToken(env, tokenUid);
-        const { initToken, tokenHash, tokenSalt, ...rest } = token as any;
-        return c.json({ success: true, data: rest });
+        return c.json({ success: true, data: token });
       } catch (error) {
         getLogger().error('Failed to get token', error instanceof Error ? error : new Error(String(error)));
         const errorMessage = error instanceof Error ? error.message : String(error);
@@ -118,9 +119,9 @@ const routes = new Hono()
       },
     }),
     vValidator('json', createTokenRequestSchema),
-    async (c: any) => {
+    async (c) => {
       const env = c.env as WorkerEnv;
-      const body = c.req.valid('json') as InferInput<typeof createTokenRequestSchema>;
+      const body = c.req.valid('json');
       return await createToken(body, env);
     }
   )
@@ -144,7 +145,7 @@ const routes = new Hono()
       },
     }),
     vValidator('param', tokenUidParamsSchema),
-    async (c: any) => {
+    async (c) => {
       const env = c.env as WorkerEnv;
       const tokenUid = c.req.valid('param').tokenUid;
       try {
@@ -169,7 +170,7 @@ const routes = new Hono()
 const exampleAppApiTokenHandler: AppHandler = {
   name: 'api-token',
   version: '0.1.0',
-  routes,
+  routes: routes as unknown as AppHandler['routes'],
   componentSchemas: componentSchemas,
   initLogger: (config, context, worker, handler) => {
     initializeLogger(config, context, worker);

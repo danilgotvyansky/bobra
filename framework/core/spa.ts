@@ -2,9 +2,8 @@ import { Hono } from 'hono';
 import { getLogger, initializeLogger } from '../logging/logger';
 import type { AppHandler } from './discovery';
 
-// Basic environment type for SPA handler
-interface SpaEnv {
-  [key: string]: any;
+interface AssetBinding {
+  fetch(request: Request): Promise<Response>;
 }
 
 export interface SpaHandlerOptions {
@@ -44,18 +43,25 @@ export function createSpaHandler(options: SpaHandlerOptions): AppHandler {
     ignoreWorkerBasePath = false
   } = options;
 
-  const app = new Hono<{ Bindings: SpaEnv }>();
+  const app = new Hono<{ Bindings: Record<string, unknown> }>();
 
   // Handle all requests under this handler's path
   app.all('*', async (c) => {
     const logger = getLogger();
     const url = new URL(c.req.url);
 
-    const ASSETS = c.env[assetsBinding] as any;
-    if (!ASSETS) {
+    const assetBindingValue = c.env[assetsBinding];
+    const hasFetch = typeof assetBindingValue === 'object'
+      && assetBindingValue !== null
+      && 'fetch' in assetBindingValue
+      && typeof (assetBindingValue as AssetBinding).fetch === 'function';
+
+    if (!hasFetch) {
       logger.error(`${assetsBinding} binding not available within SpaHandler '${name}'`);
       return c.text(`${assetsBinding} binding not available`, 503);
     }
+
+    const assets = assetBindingValue as AssetBinding;
 
     // Recursion guard: prevent infinite loops when ASSETS routes back to the handler
     if (c.req.header('X-Recursive-Fetch') === 'true') {
@@ -69,7 +75,7 @@ export function createSpaHandler(options: SpaHandlerOptions): AppHandler {
       const assetRequest = new Request(c.req.url, c.req.raw);
       assetRequest.headers.set('X-Recursive-Fetch', 'true');
 
-      const response = await ASSETS.fetch(assetRequest);
+      const response = await assets.fetch(assetRequest);
 
       return response;
     }
@@ -86,7 +92,7 @@ export function createSpaHandler(options: SpaHandlerOptions): AppHandler {
     const indexRequest = new Request(indexUrl, c.req.raw);
     indexRequest.headers.set('X-Recursive-Fetch', 'true');
 
-    const response = await ASSETS.fetch(indexRequest);
+    const response = await assets.fetch(indexRequest);
 
     if (response.status !== 200) {
       logger.error(`[SpaHandler:${name}] Failed to fetch ${indexPath}. Status: ${response.status}`);

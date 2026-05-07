@@ -46,7 +46,8 @@ if (typeof process !== 'undefined' && process.versions && process.versions.node)
 
 // Only import Node.js specific modules conditionally
 let execSync: Function | null = null;
-let fs: any = null;
+type NodeFsModule = typeof import('fs');
+let fs: NodeFsModule | null = null;
 
 // Check if we're in Node.js environment
 const isNode = typeof process !== 'undefined' && process.versions && process.versions.node;
@@ -55,7 +56,7 @@ if (isNode) {
   // We're in Node.js - import Node-specific modules
   const childProcess = require('child_process');
   execSync = childProcess.execSync;
-  fs = require('fs');
+  fs = require('fs') as NodeFsModule;
 }
 
 // Import DB modules that work in both environments
@@ -328,8 +329,8 @@ async function createInitialTokenPostgres(connectionString: string) {
     }
     const { token, record } = await createPublicApiToken({ initToken: true, name: 'Initial Instance Token' });
     await sqlClient`
-      INSERT INTO tokens (uid, name, token_hash, token_salt, ip_addresses, expires_at, created_at, last_used_at, init_token)
-      VALUES (${record.uid}, ${record.name || null}, ${record.tokenHash}, ${record.tokenSalt}, ${JSON.stringify(record.ipAddresses || [])}::jsonb, ${new Date(record.expiresAt)}, ${new Date(record.createdAt)}, ${null}, ${true})
+      INSERT INTO tokens (uid, name, token_hash, token_salt, expires_at, created_at, last_used_at, init_token)
+      VALUES (${record.uid}, ${record.name || null}, ${record.tokenHash}, ${record.tokenSalt}, ${new Date(record.expiresAt)}, ${new Date(record.createdAt)}, ${null}, ${true})
     `;
 
     // Run any app-specific SQL after core token insert (e.g. linking token to organizations)
@@ -389,8 +390,8 @@ async function createInitialTokenD1(options: { wranglerConfig: string, local?: b
   if (need) {
     // Core token insert — runs for all Bobra apps
     const coreSql = [
-      `INSERT INTO tokens (uid, name, token_hash, token_salt, ip_addresses, expires_at, created_at, last_used_at, init_token)`,
-      `SELECT '${record.uid}', ${record.name ? `'${record.name.replace(/'/g, "''")}'` : 'NULL'}, '${record.tokenHash}', '${record.tokenSalt}', '[]', '${new Date(record.expiresAt).toISOString()}', '${new Date(record.createdAt).toISOString()}', NULL, 1`,
+      `INSERT INTO tokens (uid, name, token_hash, token_salt, expires_at, created_at, last_used_at, init_token)`,
+      `SELECT '${record.uid}', ${record.name ? `'${record.name.replace(/'/g, "''")}'` : 'NULL'}, '${record.tokenHash}', '${record.tokenSalt}', '${new Date(record.expiresAt).toISOString()}', '${new Date(record.createdAt).toISOString()}', NULL, 1`,
       `WHERE (SELECT created FROM init_token_created WHERE id = 'singleton') = 0;`,
       "UPDATE init_token_created SET created = 1, created_at = datetime('now') WHERE id = 'singleton' AND created = 0;"
     ].join(' ').replace(/\\n/g, ' ');

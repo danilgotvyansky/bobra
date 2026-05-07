@@ -13,7 +13,7 @@ export interface LogEntry {
   context?: string;
   worker?: string;
   handler?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   error?: {
     name: string;
     message: string;
@@ -41,7 +41,11 @@ export interface LoggerConfig {
 const SENSITIVE_KEYS = ['password', 'token', 'secret', 'authorization', 'key', 'auth', 'cookie', 'credential', 'access_token', 'refresh_token'];
 const BEARER_REGEX = /(Bearer\s+)([a-zA-Z0-9\-_.]+)/gi;
 
-function sanitize(obj: any): any {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function sanitize(obj: unknown): unknown {
   if (!obj) return obj;
 
   if (typeof obj === 'string') {
@@ -54,19 +58,25 @@ function sanitize(obj: any): any {
   }
 
   if (typeof obj === 'object') {
-    const newObj: any = {};
-    for (const key in obj) {
+    const newObj: Record<string, unknown> = {};
+    for (const key in obj as Record<string, unknown>) {
       const lowerKey = key.toLowerCase();
       if (SENSITIVE_KEYS.some(k => lowerKey.includes(k))) {
         newObj[key] = '***';
       } else {
-        newObj[key] = sanitize(obj[key]);
+        newObj[key] = sanitize((obj as Record<string, unknown>)[key]);
       }
     }
     return newObj;
   }
 
   return obj;
+}
+
+function sanitizeRecord(metadata?: Record<string, unknown>): Record<string, unknown> | undefined {
+  if (!metadata) return undefined;
+  const sanitized = sanitize(metadata);
+  return isRecord(sanitized) ? sanitized : undefined;
 }
 
 export class AppLogger {
@@ -110,7 +120,7 @@ export class AppLogger {
     return level >= this.config.level;
   }
 
-  private formatMessage(level: LogLevel, message: string, metadata?: Record<string, any>, error?: Error): string {
+  private formatMessage(level: LogLevel, message: string, metadata?: Record<string, unknown>, error?: Error): string {
     const levelName = LogLevel[level].toLowerCase();
     const entry: LogEntry = {
       timestamp: new Date().toISOString(),
@@ -119,7 +129,7 @@ export class AppLogger {
       context: this.context,
       worker: this.worker,
       handler: this.handler,
-      metadata: sanitize(metadata),
+      metadata: sanitizeRecord(metadata),
       error: error ? {
         name: error.name,
         message: error.message,
@@ -156,7 +166,7 @@ export class AppLogger {
       }
     }
 
-    formatted += sanitize(message);
+    formatted += String(sanitize(message));
 
     if (entry.metadata && Object.keys(entry.metadata).length > 0) {
       formatted += ` ${JSON.stringify(entry.metadata)}`;
@@ -172,29 +182,29 @@ export class AppLogger {
     return formatted;
   }
 
-  debug(message: string, metadata?: Record<string, any>): void {
+  debug(message: string, metadata?: Record<string, unknown>): void {
     if (!this.shouldLog(LogLevel.DEBUG)) return;
     const sink = this.config.debugSink === 'info' ? 'info' : 'debug';
     console[sink](this.formatMessage(LogLevel.DEBUG, message, metadata));
   }
 
-  info(message: string, metadata?: Record<string, any>): void {
+  info(message: string, metadata?: Record<string, unknown>): void {
     if (!this.shouldLog(LogLevel.INFO)) return;
     console.info(this.formatMessage(LogLevel.INFO, message, metadata));
   }
 
-  warn(message: string, metadata?: Record<string, any>): void {
+  warn(message: string, metadata?: Record<string, unknown>): void {
     if (!this.shouldLog(LogLevel.WARN)) return;
     console.warn(this.formatMessage(LogLevel.WARN, message, metadata));
   }
 
-  error(message: string, error?: Error, metadata?: Record<string, any>): void {
+  error(message: string, error?: Error, metadata?: Record<string, unknown>): void {
     if (!this.shouldLog(LogLevel.ERROR)) return;
     console.error(this.formatMessage(LogLevel.ERROR, message, metadata, error));
   }
 
   // HTTP request logging
-  request(method: string, path: string, status?: number, duration?: number, metadata?: Record<string, any>): void {
+  request(method: string, path: string, status?: number, duration?: number, metadata?: Record<string, unknown>): void {
     if (!this.shouldLog(LogLevel.INFO)) return;
 
     const logMetadata = {
@@ -256,7 +266,7 @@ export function getLogger(): AppLogger {
 }
 
 // Utility to serialize Error objects
-export function serializeError(error: unknown): Record<string, any> {
+export function serializeError(error: unknown): Record<string, unknown> {
   if (error instanceof Error) {
     return {
       name: error.name,
@@ -269,11 +279,11 @@ export function serializeError(error: unknown): Record<string, any> {
 
 // Convenience functions for global logger
 export const logger = {
-  debug: (message: string, metadata?: Record<string, any>) => getLogger().debug(message, metadata),
-  info: (message: string, metadata?: Record<string, any>) => getLogger().info(message, metadata),
-  warn: (message: string, metadata?: Record<string, any>) => getLogger().warn(message, metadata),
-  error: (message: string, error?: Error, metadata?: Record<string, any>) => getLogger().error(message, error, metadata),
-  request: (method: string, path: string, status?: number, duration?: number, metadata?: Record<string, any>) =>
+  debug: (message: string, metadata?: Record<string, unknown>) => getLogger().debug(message, metadata),
+  info: (message: string, metadata?: Record<string, unknown>) => getLogger().info(message, metadata),
+  warn: (message: string, metadata?: Record<string, unknown>) => getLogger().warn(message, metadata),
+  error: (message: string, error?: Error, metadata?: Record<string, unknown>) => getLogger().error(message, error, metadata),
+  request: (method: string, path: string, status?: number, duration?: number, metadata?: Record<string, unknown>) =>
     getLogger().request(method, path, status, duration, metadata),
   child: (context: string, handler?: string) => getLogger().child(context, handler),
   setWorker: (worker: string) => getLogger().setWorker(worker),
@@ -285,7 +295,7 @@ export const logger = {
  * Useful for reducing log volume during initialization or batch processing.
  */
 export class LogStack {
-  private messages: Array<{ message: string; metadata?: Record<string, any> }> = [];
+  private messages: Array<{ message: string; metadata?: Record<string, unknown> }> = [];
   private logger: AppLogger;
 
   constructor(logger?: AppLogger) {
@@ -295,7 +305,7 @@ export class LogStack {
   /**
    * Add a message to the stack
    */
-  add(message: string, metadata?: Record<string, any>): void {
+  add(message: string, metadata?: Record<string, unknown>): void {
     this.messages.push({ message, metadata });
   }
 

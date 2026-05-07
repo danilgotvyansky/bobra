@@ -1,6 +1,25 @@
 import * as v from 'valibot';
 import { toJsonSchema } from '@valibot/to-json-schema';
-export { mergeOpenApiSpecs } from './merge-openapi';
+import type { OpenAPIV3 } from 'openapi-types';
+export * from './merge-openapi';
+
+type JsonSchemaObject = {
+  [key: string]: unknown;
+  type?: string;
+  properties?: Record<string, unknown>;
+  required?: string[];
+  allOf?: unknown[];
+  anyOf?: unknown[];
+  items?: unknown;
+  enum?: unknown[];
+  const?: unknown;
+  additionalProperties?: boolean;
+  example?: unknown;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
 
 /**
  * Generate schema reference for OpenAPI
@@ -15,16 +34,16 @@ export function generateSchemaRef(schemaName: string): { $ref: string } {
  */
 export function generateListResponseSchema(itemSchemaName: string) {
   return {
-    type: 'object',
+    type: 'object' as const,
     properties: {
-      success: { type: 'boolean' },
+      success: { type: 'boolean' as const },
       data: {
-        type: 'array',
+        type: 'array' as const,
         items: generateSchemaRef(itemSchemaName)
       },
-      count: { type: 'number' }
+      count: { type: 'number' as const }
     }
-  } as any;
+  };
 }
 
 /**
@@ -33,33 +52,33 @@ export function generateListResponseSchema(itemSchemaName: string) {
  */
 export function generateResponseSchema(itemSchemaName: string) {
   return {
-    type: 'object',
+    type: 'object' as const,
     properties: {
-      success: { type: 'boolean' },
+      success: { type: 'boolean' as const },
       data: generateSchemaRef(itemSchemaName)
     }
-  } as any;
+  };
 }
 
 /**
  * Standard error response JSON Schema (plain JSON Schema, not Valibot).
  * Useful directly inside describeRoute responses.
  */
-export const errorResponseJsonSchema: any = {
-  type: 'object',
+export const errorResponseJsonSchema = {
+  type: 'object' as const,
   properties: {
-    success: { type: 'boolean', example: false },
-    error: { type: 'string', example: 'Details about the error' },
-    details: { type: 'object', additionalProperties: true, example: {} },
+    success: { type: 'boolean' as const, example: false },
+    error: { type: 'string' as const, example: 'Details about the error' },
+    details: { type: 'object' as const, additionalProperties: true, example: {} },
   },
-};
+} satisfies OpenAPIV3.SchemaObject;
 
 /**
  * Schema that transforms Date | string | null to string | undefined.
  * Handles database Date objects and converts them to ISO string format.
  */
 export const dateToStringSchema = v.pipe(
-  v.any(),
+  v.unknown(),
   v.transform((input) => {
     if (!input) return undefined;
     if (typeof input === 'string') return input;
@@ -81,7 +100,7 @@ export const simpleSuccessResponseSchema = v.object({
 export const errorResponseSchema = v.object({
   success: v.literal(false),
   error: v.pipe(v.string(), v.description('Error message')),
-  details: v.optional(v.record(v.string(), v.any())),
+  details: v.optional(v.record(v.string(), v.unknown())),
 });
 
 /**
@@ -89,48 +108,50 @@ export const errorResponseSchema = v.object({
  * Uses @valibot/to-json-schema to automatically extract properties.
  * Supports both ObjectSchema and IntersectSchema (from v.intersect).
  */
-export function valibotSchemaToOpenAPIParameters(schema: v.GenericSchema<any>): Array<{
-  name: string;
-  in: 'query';
-  schema: any;
-  required?: boolean;
-  description?: string;
-}> {
-  const jsonSchema = toJsonSchema(schema);
+export function valibotSchemaToOpenAPIParameters(schema: v.GenericSchema<unknown>): OpenAPIV3.ParameterObject[] {
+  const jsonSchema = toJsonSchema(schema) as unknown;
 
   // Handle allOf (from v.intersect) — merge properties from all schemas
-  let properties: Record<string, any> = {};
+  let properties: Record<string, unknown> = {};
   let required: string[] = [];
 
-  if (jsonSchema.allOf && Array.isArray(jsonSchema.allOf)) {
+  if (isRecord(jsonSchema) && Array.isArray(jsonSchema.allOf)) {
     for (const subSchema of jsonSchema.allOf) {
-      if (typeof subSchema === 'object' && subSchema !== null && !('const' in subSchema) && !('enum' in subSchema)) {
-        if ('properties' in subSchema && typeof subSchema.properties === 'object' && subSchema.properties !== null) {
+      if (isRecord(subSchema) && !('const' in subSchema) && !('enum' in subSchema)) {
+        if (isRecord(subSchema.properties)) {
           properties = { ...properties, ...subSchema.properties };
         }
-        if ('required' in subSchema && Array.isArray(subSchema.required)) {
-          required = [...required, ...subSchema.required];
+        if (Array.isArray(subSchema.required)) {
+          required = [
+            ...required,
+            ...subSchema.required.filter((entry): entry is string => typeof entry === 'string')
+          ];
         }
       }
     }
   } else {
-    if (typeof jsonSchema === 'object' && jsonSchema !== null && 'properties' in jsonSchema && typeof jsonSchema.properties === 'object' && jsonSchema.properties !== null) {
-      properties = jsonSchema.properties || {};
+    if (isRecord(jsonSchema) && isRecord(jsonSchema.properties)) {
+      properties = jsonSchema.properties;
     }
-    if (typeof jsonSchema === 'object' && jsonSchema !== null && 'required' in jsonSchema && Array.isArray(jsonSchema.required)) {
-      required = jsonSchema.required || [];
+    if (isRecord(jsonSchema) && Array.isArray(jsonSchema.required)) {
+      required = jsonSchema.required.filter((entry): entry is string => typeof entry === 'string');
     }
   }
 
-  return Object.entries(properties).map(([name, prop]: [string, any]) => {
+  return Object.entries(properties).map(([name, prop]) => {
     // Convert anyOf with all const values to enum for better OpenAPI compatibility
-    let paramSchema = prop;
-    if (prop.anyOf && Array.isArray(prop.anyOf)) {
+    let paramSchema = prop as OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject;
+    if (isRecord(prop) && Array.isArray(prop.anyOf)) {
       const constValues = prop.anyOf
-        .filter((item: any) => item.const !== undefined)
-        .map((item: any) => item.const);
+        .filter(isRecord)
+        .filter((item) => Object.prototype.hasOwnProperty.call(item, 'const'))
+        .map((item) => item.const);
+
       if (constValues.length === prop.anyOf.length && constValues.length > 0) {
-        paramSchema = { type: 'string', enum: constValues };
+        paramSchema = {
+          type: 'string',
+          enum: constValues as (string | number | boolean | null)[]
+        };
       }
     }
 

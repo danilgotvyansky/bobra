@@ -12,7 +12,7 @@ export default createRouterWorker({
 
 	// Here is an example how you can add custom router-level auth
 	// onBeforeRoutes: (app) => {
-	// 	const combinedAuth = async (c: any, next: any) => {
+	// 	const combinedAuth = async (c: Context, next: unknown) => {
 	// 		const authHeader = c.req.header('Authorization') || c.req.header('X-Authorization');
 	// 		const token = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : undefined;
 	// 		if (token && token.startsWith('bct_') && token.length === 52) {
@@ -46,7 +46,7 @@ export default createRouterWorker({
 	// 	if (!melodyAuthSPAClientID) {
 	// 		throw new Error('MELODY_AUTH_SPA_CLIENT_ID is required in vars for public config');
 	// 	}
-	// 	const melodyAuthService = config.router?.services?.find((s: any) => s.binding === 'MELODY_AUTH' || s.service === 'melody-auth');
+	// 	const melodyAuthService = config.router?.services?.find((s: { binding?: string; service?: string }) => s.binding === 'MELODY_AUTH' || s.service === 'melody-auth');
 	// 	const melodyAuthUrl = env.MELODY_AUTH_URL || melodyAuthService?.external_url;
 
 	// 	return {

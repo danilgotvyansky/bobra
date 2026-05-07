@@ -13,45 +13,37 @@ import {
 } from '@danylohotvianskyi/bobra-framework/logging';
 import { serviceFetch } from '@danylohotvianskyi/bobra-framework/network';
 import type { AppHandler } from '@danylohotvianskyi/bobra-framework/core';
-import { mergeOpenApiSpecs } from '@danylohotvianskyi/bobra-framework/batteries/openapi';
-import type { Env, ServiceDiscovery } from './types';
+import {
+  mergeOpenApiSpecs,
+  collectHandlerNames,
+  isObjectRecord
+} from '@danylohotvianskyi/bobra-framework/batteries/openapi';
+import type { Env } from './types';
 import { Scalar } from '@scalar/hono-api-reference';
 import { createMarkdownFromOpenApi } from '@scalar/openapi-to-markdown'
 
-const routes = new Hono()
+const routes: AppHandler['routes'] = new Hono<{ Bindings: Record<string, unknown> }>()
   // Return merged OpenAPI spec across all handlers
-  .get('/openapi', async (c: any) => {
+  .get('/openapi', async (c) => {
     const env = c.env as Env;
-    const discovery = c.get('serviceDiscovery') as any as ServiceDiscovery & { allWorkers?: Record<string, { handlers: string[] }> };
-
-    // Collect unique handler names from discovery (all workers)
-    const handlerNames = new Set<string>();
-    const allWorkers = (discovery as any)?.allWorkers || {};
-    for (const [, worker] of Object.entries(allWorkers)) {
-      const handlers: any[] = (worker as any)?.handlers || [];
-      for (const handlerName of handlers) {
-        // Skip api-docs itself to avoid self-inclusion if desired
-        if (handlerName && handlerName !== 'api-docs') handlerNames.add(handlerName);
-      }
-    }
-
-    // Fallback: if discovery lacks allWorkers, try initializedHandlers on current worker
-    if (handlerNames.size === 0 && Array.isArray((discovery as any)?.initializedHandlers)) {
-      for (const name of (discovery as any).initializedHandlers) handlerNames.add(name);
-    }
+    const discovery = (c.get as (key: string) => unknown)('serviceDiscovery');
+    const handlerNames = collectHandlerNames(discovery);
 
     getLogger().debug('OpenAPI merge: handlers selected', { handlers: Array.from(handlerNames) });
 
     const results = await Promise.allSettled(
       Array.from(handlerNames).map(async (name) => {
         try {
-          const res = await serviceFetch(env, name, '/openapi', {}, c);
+          const res = await serviceFetch(env, name, '/openapi');
           getLogger().debug('OpenAPI merge: serviceFetch returned', { target: name, ok: res.ok, status: res.status });
           if (!res.ok) throw new Error(`status ${res.status}`);
           return await res.json();
         } catch (err) {
           const e = err instanceof Error ? err : new Error(String(err));
-          getLogger().warn(`Failed to fetch OpenAPI for handler '${name}'`, e);
+          getLogger().warn(`Failed to fetch OpenAPI for handler '${name}'`, {
+            error: e.message,
+            stack: e.stack
+          });
           return null;
         }
       })
@@ -86,19 +78,17 @@ const routes = new Hono()
    * Register a route to serve the Markdown for LLMs
    * @see https://llmstxt.org/
    */
-  .get('/llms.txt', async (c: any) => {
+  .get('/llms.txt', async (c) => {
     const url = new URL('openapi', c.req.url);
-    const headers: Record<string, string> = {};
-    const auth = c.req.header('Authorization');
-    const orgCtx = c.req.header('X-Org-Context');
-    if (auth) headers['Authorization'] = auth;
-    if (orgCtx) headers['X-Org-Context'] = orgCtx;
+    const res = await fetch(url.toString());
+    if (!res.ok) return c.text(`Failed to load OpenAPI (${res.status})`, 502);
 
-    const res = await fetch(url.toString(), { headers });
-    if (!res.ok) return c.text('Failed to load OpenAPI', res.status);
+    const openapi: unknown = await res.json();
+    if (!isObjectRecord(openapi)) {
+      return c.text('Invalid OpenAPI payload', 502);
+    }
 
-    const openapi = await res.json();
-    const markdown = await createMarkdownFromOpenApi(openapi as any);
+    const markdown = await createMarkdownFromOpenApi(openapi);
     return c.text(markdown, 200, { 'Content-Type': 'text/plain; charset=utf-8' });
   })
   ;

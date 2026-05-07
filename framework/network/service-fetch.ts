@@ -7,12 +7,16 @@ import {
   getServiceDiscovery,
   getFetchInstance,
   getRouterBasePath,
-  getRouterWorkerName
+  getRouterWorkerName,
+  type FetchInstance
 } from '../core/config';
+import { Context } from 'hono';
+import type { RouterEnv } from './router';
 
 // Convenience function for simple handler calls
 export async function callHandler(
-  env: any,
+  // Replaced WorkerEnv with RouterEnv for consistency
+  env: RouterEnv,
   handlerName: string,
   uri: string,
   options: RequestInit = {}
@@ -22,7 +26,8 @@ export async function callHandler(
 
 // Convenience function for simple service calls
 export async function callService(
-  env: any,
+  // Replaced WorkerEnv with RouterEnv for consistency
+  env: RouterEnv,
   serviceName: string,
   uri: string,
   options: RequestInit = {}
@@ -31,9 +36,9 @@ export async function callService(
 }
 
 // Redact Authorization headers from options for debug logging
-function redactOptions(options?: RequestInit): any {
+function redactOptions(options?: RequestInit): RequestInit | undefined {
   try {
-    const o: any = options ? JSON.parse(JSON.stringify(options)) : undefined;
+    const o: RequestInit | undefined = options ? JSON.parse(JSON.stringify(options)) : undefined;
     if (o && o.headers) {
       const h = new Headers(o.headers);
       if (h.has('Authorization')) h.set('Authorization', 'Bearer ***');
@@ -46,20 +51,22 @@ function redactOptions(options?: RequestInit): any {
 
 // Core inter-service communication utility
 export async function serviceFetch(
-  env: any,
-  fetchInstance: { type: 'handler' | 'service'; name: string; handler?: any; binding?: any; external_url?: string } | string,
+  // Replaced any with RouterEnv - matches framework's environment interface
+  env: RouterEnv,
+  fetchInstance: FetchInstance | string,
   uri: string,
   options: RequestInit = {},
-  ctx?: any
+  // Replaced any with Hono Context - standard request context
+  ctx?: Context
 ): Promise<Response> {
   const config = await loadConfig(env);
   const workerName = env.WORKER_NAME || 'default-worker';
 
-  const discovery = getServiceDiscovery(env, config, workerName, appWorkerRegistry);
+  const discovery = getServiceDiscovery(env, config, workerName as string, appWorkerRegistry);
   const routerWorkerName = getRouterWorkerName(config);
 
   // If fetchInstance is a string, resolve it to an actual instance
-  let instance: { type: 'handler' | 'service'; name: string; handler?: any; binding?: any; external_url?: string } | null;
+  let instance: FetchInstance | null;
 
   if (typeof fetchInstance === 'string') {
     instance = getFetchInstance(fetchInstance, discovery, env);
@@ -82,7 +89,9 @@ export async function serviceFetch(
     const headers = new Headers(initCopy.headers || {});
     if (!headers.has('Authorization') && !headers.has('X-Authorization')) {
       try {
-        const ctxHeaders: Headers | null = ctx?.req?.raw?.headers || ctx?.req?.headers || ctx?.request?.headers || null;
+        const ctxHeaders = {
+          get: (name: string) => ctx?.req?.header(name) || null
+        };
         const authVal = ctxHeaders?.get?.('Authorization') || ctxHeaders?.get?.('X-Authorization');
         if (authVal) headers.set('Authorization', authVal);
       } catch { }
@@ -109,17 +118,17 @@ export async function serviceFetch(
     hasExternalUrl: !!instance.external_url
   });
 
-  const workerBasePath = getWorkerBasePath(config, workerName);
+  const workerBasePath = getWorkerBasePath(config, workerName as string);
   const routerBasePath = getRouterBasePath(config);
 
   // Case 1: Handler on same worker — use in-memory Hono app.fetch
   if (instance.type === 'handler' && discovery.initializedHandlers.includes(instance.name)) {
-    const handler = appWorkerRegistry.getHandler(workerName, instance.name);
+    const handler = appWorkerRegistry.getHandler(workerName as string, instance.name);
     if (!handler) {
       throw new Error(`Handler '${instance.name}' not found in discovery`);
     }
 
-    const workerApp = appWorkerRegistry.getMainApp(workerName);
+    const workerApp = appWorkerRegistry.getMainApp(workerName as string);
     if (!workerApp) {
       throw new Error(`Worker app '${workerName}' not found in registry`);
     }
@@ -175,7 +184,7 @@ export async function serviceFetch(
       });
       const init = ensureAuthHeader(options);
       const url = uri.startsWith('http') ? uri : `http://internal${uri.startsWith('/') ? uri : '/' + uri}`;
-      return await instance.binding.fetch(url, init);
+      return await (instance.binding as { fetch: (url: string, init?: RequestInit) => Promise<Response> }).fetch(url, init);
     } catch (error) {
       getLogger().error(`Direct service binding call failed for ${instance.name}`, error instanceof Error ? error : new Error(String(error)));
       throw error;
@@ -247,7 +256,7 @@ export async function serviceFetch(
       });
       const init = ensureAuthHeader(options);
       const url = routerPath.startsWith('http') ? routerPath : `http://internal${routerPath.startsWith('/') ? routerPath : '/' + routerPath}`;
-      return await routerBinding.fetch(url, init);
+      return await (routerBinding as { fetch: (url: string, init?: RequestInit) => Promise<Response> }).fetch(url, init);
     }
   }
 
@@ -291,7 +300,7 @@ export async function serviceFetch(
       });
       const init = ensureAuthHeader(options);
       const url = serviceProxyPath.startsWith('http') ? serviceProxyPath : `http://internal${serviceProxyPath.startsWith('/') ? serviceProxyPath : '/' + serviceProxyPath}`;
-      return await routerBinding.fetch(url, init);
+      return await (routerBinding as { fetch: (url: string, init?: RequestInit) => Promise<Response> }).fetch(url, init);
     }
   }
 

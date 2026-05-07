@@ -15,8 +15,8 @@ import * as schema from './schema';
 export { isSQLite, type DatabaseContext, type DrizzleD1Client, type DrizzlePgClient, hasPostgresBindings };
 
 // Example of a custom pgEdge router that overrides the default routing logic
-const customPgEdgeRouter: PgEdgeRouter = (locations: string[], cfContinentStr?: string, cfInfo?: any) => {
-  // You can implement any custom routing logic here based on locations and Cloudflare context
+const customPgEdgeRouter: PgEdgeRouter = (locations: string[], cfContinentStr?: string, _cfInfo?: unknown) => {
+  // You can implement custom routing logic here based on locations and Cloudflare context
   // For example, routing all requests to a specific region for debugging
   if (cfContinentStr === 'EU' && locations.includes('eu')) {
     return 'eu';

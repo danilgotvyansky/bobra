@@ -8,6 +8,7 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
+    "@example-app/shared-utils": "workspace:*",
     "@danylohotvianskyi/bobra-framework": "catalog:",
     "drizzle-orm": "^0.44.3",
     "drizzle-valibot": "^0.4.2",

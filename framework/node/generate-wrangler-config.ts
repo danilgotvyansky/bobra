@@ -24,7 +24,9 @@ import {
 import { JSONValue } from 'hono/utils/types';
 import { gzipSync } from 'zlib';
 
-interface WranglerConfig {
+export type { AppConfig } from '../core/config.js';
+
+export interface WranglerConfig {
   name: string;
   main: string;
   compatibility_date: string;
@@ -111,6 +113,66 @@ interface WranglerConfig {
       enabled?: boolean;
     };
   };
+  // observability?: {
+  //   traces?: {
+  //     enabled?: boolean;
+  //     destinations?: string[];
+  //   };
+  //   logs?: {
+  //     enabled?: boolean;
+  //     destinations?: string[];
+  //   };
+  // };
+}
+
+export interface WranglerConfigExtensionContext<
+  TConfig extends AppConfig = AppConfig,
+  TWranglerConfig extends WranglerConfig = WranglerConfig,
+> {
+  config: TConfig;
+  workerType: string;
+  workerName: string;
+  wranglerConfig: TWranglerConfig;
+}
+
+export interface WranglerConfigWriteContext<
+  TConfig extends AppConfig = AppConfig,
+  TWranglerConfig extends WranglerConfig = WranglerConfig,
+> extends WranglerConfigExtensionContext<TConfig, TWranglerConfig> {
+  configFile: string;
+  outputFile: string;
+  outputDir: string;
+  outputContent: string;
+}
+
+export interface WranglerConfigGeneratorExtension<
+  TConfig extends AppConfig = AppConfig,
+  TWranglerConfig extends WranglerConfig = WranglerConfig,
+> {
+  validateConfig?: (config: TConfig) => void;
+  extendWranglerConfig?: (
+    context: WranglerConfigExtensionContext<TConfig, TWranglerConfig>
+  ) => TWranglerConfig | void;
+  serializeOutput?: (wranglerConfig: TWranglerConfig) => string;
+  onBeforeWrite?: (context: WranglerConfigWriteContext<TConfig, TWranglerConfig>) => void;
+  onAfterWrite?: (context: WranglerConfigWriteContext<TConfig, TWranglerConfig>) => void;
+}
+
+export interface GenerateWranglerMainOptions<
+  TConfig extends AppConfig = AppConfig,
+  TWranglerConfig extends WranglerConfig = WranglerConfig,
+> {
+  args?: string[];
+  extension?: WranglerConfigGeneratorExtension<TConfig, TWranglerConfig>;
+}
+
+export function defineWranglerConfigExtension<
+  TConfig extends AppConfig = AppConfig,
+  TWranglerConfig extends WranglerConfig = WranglerConfig,
+>(
+  extension: WranglerConfigGeneratorExtension<TConfig, TWranglerConfig>
+): WranglerConfigGeneratorExtension<TConfig, TWranglerConfig> {
+  return extension;
 }
 
 function normalizePathValue(p?: string): string {
@@ -120,9 +182,17 @@ function normalizePathValue(p?: string): string {
   return v;
 }
 
-export function generateWranglerConfig(config: AppConfig, workerType: string, workerName: string): WranglerConfig {
+export function generateWranglerConfig<
+  TConfig extends AppConfig = AppConfig,
+  TWranglerConfig extends WranglerConfig = WranglerConfig,
+>(
+  config: TConfig,
+  workerType: string,
+  workerName: string,
+  extension?: WranglerConfigGeneratorExtension<TConfig, TWranglerConfig>
+): TWranglerConfig {
   const configYaml = dump(config);
-  const compressed = gzipSync(configYaml, { mtime: 0 } as any);
+  const compressed = gzipSync(configYaml);
   const configContent = compressed.toString('base64');
 
   let wranglerConfig: WranglerConfig;
@@ -142,8 +212,24 @@ export function generateWranglerConfig(config: AppConfig, workerType: string, wo
         PGEDGE_LOCATIONS: JSON.stringify(config.pgEdge?.locations || []),
         ...(config.deployment_context && { DEPLOYMENT_CONTEXT: config.deployment_context }),
         ...config.vars,
-        ...routerConfig?.vars
+        ...routerConfig?.vars,
+        PGEDGE_FAILOVER_ENABLED: config.pgEdge?.connection_fallback ?? true
       },
+      // observability: {
+      //   ...(routerObservability?.traces ? {
+      //     traces: {
+      //       enabled: routerObservability?.traces?.enabled || false,
+      //       ...(Array.isArray(routerObservability?.traces?.destinations)
+      //         ? { destinations: routerObservability.traces.destinations }
+      //         : {}),
+      //     },
+      //   } : {}),
+      //   logs: {
+      //     enabled: routerObservability?.logs?.enabled || false,
+      //     ...(Array.isArray(routerObservability?.logs?.destinations)
+      //       ? { destinations: routerObservability.logs.destinations }
+      //       : {}),
+      //   }
       observability: {
         logs: {
           enabled: routerConfig?.observability?.logs?.enabled || false
@@ -151,9 +237,8 @@ export function generateWranglerConfig(config: AppConfig, workerType: string, wo
       }
     };
 
-    const rcAny = routerConfig as any;
-    const assetsDirectory: string | undefined = rcAny?.assets?.directory || 'public';
-    let runWorkerFirstConfig: boolean | string[] | undefined = rcAny?.assets?.run_worker_first;
+    const assetsDirectory: string | undefined = routerConfig?.assets?.directory || 'public';
+    let runWorkerFirstConfig: boolean | string[] | undefined = routerConfig?.assets?.run_worker_first;
 
     const patterns = new Set<string>();
 
@@ -185,8 +270,8 @@ export function generateWranglerConfig(config: AppConfig, workerType: string, wo
     } else {
       runWorkerFirst = Array.from(patterns);
     }
-    const notFoundHandling: 'single-page-application' | '404-page' | 'none' | undefined = rcAny?.assets?.not_found_handling || 'single-page-application';
-    const htmlHandling: 'auto-trailing-slash' | 'force-trailing-slash' | 'drop-trailing-slash' | 'none' | undefined = rcAny?.assets?.html_handling;
+    const notFoundHandling: 'single-page-application' | '404-page' | 'none' | undefined = routerConfig?.assets?.not_found_handling || 'single-page-application';
+    const htmlHandling: 'auto-trailing-slash' | 'force-trailing-slash' | 'drop-trailing-slash' | 'none' | undefined = routerConfig?.assets?.html_handling;
     wranglerConfig.assets = {
       directory: assetsDirectory,
       binding: 'ASSETS',
@@ -252,8 +337,25 @@ export function generateWranglerConfig(config: AppConfig, workerType: string, wo
         PGEDGE_LOCATIONS: JSON.stringify(config.pgEdge?.locations || []),
         ...(config.deployment_context && { DEPLOYMENT_CONTEXT: config.deployment_context }),
         ...config.vars,
-        ...workerConfig?.vars
+        ...workerConfig?.vars,
+        PGEDGE_FAILOVER_ENABLED: config.pgEdge?.connection_fallback ?? true
       },
+      // observability: {
+      //   ...(workerObservability?.traces ? {
+      //     traces: {
+      //       enabled: workerObservability?.traces?.enabled || false,
+      //       ...(Array.isArray(workerObservability?.traces?.destinations)
+      //         ? { destinations: workerObservability.traces.destinations }
+      //         : {}),
+      //     },
+      //   } : {}),
+      //   logs: {
+      //     enabled: workerObservability?.logs?.enabled || false,
+      //     ...(Array.isArray(workerObservability?.logs?.destinations)
+      //       ? { destinations: workerObservability.logs.destinations }
+      //       : {}),
+      //   }
+      // }
       observability: {
         logs: {
           enabled: workerConfig?.observability?.logs?.enabled || false
@@ -271,10 +373,9 @@ export function generateWranglerConfig(config: AppConfig, workerType: string, wo
       }
     }
 
-    const workerConfigAny = workerConfig as any;
-    if (workerConfigAny?.assets) {
-      const assetsDirectory: string | undefined = workerConfigAny?.assets?.directory || 'public';
-      let runWorkerFirstConfig: boolean | string[] | undefined = workerConfigAny?.assets?.run_worker_first;
+    if (workerConfig?.assets) {
+      const assetsDirectory: string | undefined = workerConfig.assets.directory || 'public';
+      let runWorkerFirstConfig: boolean | string[] | undefined = workerConfig.assets.run_worker_first;
 
       const patterns = new Set<string>();
       if (Array.isArray(runWorkerFirstConfig)) {
@@ -288,8 +389,8 @@ export function generateWranglerConfig(config: AppConfig, workerType: string, wo
         runWorkerFirst = Array.from(patterns);
       }
 
-      const notFoundHandling: 'single-page-application' | '404-page' | 'none' | undefined = workerConfigAny?.assets?.not_found_handling || 'single-page-application';
-      const htmlHandling: 'auto-trailing-slash' | 'force-trailing-slash' | 'drop-trailing-slash' | 'none' | undefined = workerConfigAny?.assets?.html_handling;
+      const notFoundHandling: 'single-page-application' | '404-page' | 'none' | undefined = workerConfig.assets.not_found_handling || 'single-page-application';
+      const htmlHandling: 'auto-trailing-slash' | 'force-trailing-slash' | 'drop-trailing-slash' | 'none' | undefined = workerConfig.assets.html_handling;
 
       wranglerConfig.assets = {
         directory: assetsDirectory,
@@ -304,7 +405,7 @@ export function generateWranglerConfig(config: AppConfig, workerType: string, wo
       try {
         const dbBinding = getDatabaseBinding(config, workerName);
         if (dbBinding.type === 'hyperdrive') {
-          const flatHyperdriveConfigs = flattenHyperdriveConfigs(dbBinding.config as any);
+          const flatHyperdriveConfigs = flattenHyperdriveConfigs(dbBinding.config);
           wranglerConfig.hyperdrive = flatHyperdriveConfigs.map((hdConfig) => ({
             binding: hdConfig.binding,
             id: hdConfig.id,
@@ -381,7 +482,15 @@ export function generateWranglerConfig(config: AppConfig, workerType: string, wo
     }
   }
 
-  return wranglerConfig;
+  const baseWranglerConfig = wranglerConfig as TWranglerConfig;
+  const extendedWranglerConfig = extension?.extendWranglerConfig?.({
+    config,
+    workerType,
+    workerName,
+    wranglerConfig: baseWranglerConfig,
+  });
+
+  return extendedWranglerConfig || baseWranglerConfig;
 }
 
 function copyDevVarsToWorker(workerDir: string, repoRoot: string) {
@@ -428,8 +537,13 @@ function storeHash(outputDir: string, hash: string): void {
   }
 }
 
-export function main() {
-  const args = typeof process !== 'undefined' ? process.argv.slice(2) : [];
+export function main<
+  TConfig extends AppConfig = AppConfig,
+  TWranglerConfig extends WranglerConfig = WranglerConfig,
+>(
+  options: GenerateWranglerMainOptions<TConfig, TWranglerConfig> = {}
+) {
+  const args = options.args ?? (typeof process !== 'undefined' ? process.argv.slice(2) : []);
   const configFile = args[0] || process.env.CONFIG_PATH || 'config.yml';
   const outputFile = args[1] || 'wrangler.jsonc';
   const workerType = args[2] || 'worker';
@@ -446,7 +560,7 @@ export function main() {
 
   try {
     const yamlContent = fs.readFileSync(configFile, 'utf8');
-    const config = load(yamlContent) as AppConfig;
+    const config = load(yamlContent) as TConfig;
 
     if (!config.cors || !config.server) {
       throw new Error('Config must include cors and server sections');
@@ -456,7 +570,14 @@ export function main() {
       throw new Error('Server config must include name and version');
     }
 
-    const wranglerConfig = generateWranglerConfig(config, workerType, workerName);
+    options.extension?.validateConfig?.(config);
+
+    const wranglerConfig = generateWranglerConfig<TConfig, TWranglerConfig>(
+      config,
+      workerType,
+      workerName,
+      options.extension
+    );
 
     const outputDir = path.dirname(outputFile);
     if (!fs.existsSync(outputDir)) {
@@ -471,7 +592,8 @@ export function main() {
       } catch { }
     }
 
-    const outputContent = JSON.stringify(wranglerConfig, null, 2);
+    const outputContent = options.extension?.serializeOutput?.(wranglerConfig)
+      ?? JSON.stringify(wranglerConfig, null, 2);
     const newHash = generateHash(outputContent);
 
     if (fs.existsSync(outputFile)) {
@@ -491,10 +613,24 @@ export function main() {
     console.log(`   Worker type: ${workerType}`);
     console.log(`   Worker name: ${workerName}`);
 
+    const writeContext: WranglerConfigWriteContext<TConfig, TWranglerConfig> = {
+      config,
+      workerType,
+      workerName,
+      wranglerConfig,
+      configFile,
+      outputFile,
+      outputDir,
+      outputContent,
+    };
+
+    options.extension?.onBeforeWrite?.(writeContext);
+
     fs.writeFileSync(outputFile, outputContent);
 
     storeHash(outputDir, newHash);
     copyDevVarsToWorker(outputDir, repoRoot);
+    options.extension?.onAfterWrite?.(writeContext);
 
     console.log(`✅ Generated ${outputFile} successfully`);
     console.log(`   Worker name: ${wranglerConfig.name}`);
@@ -531,7 +667,7 @@ export function main() {
           const dbBinding = getDatabaseBinding(config, workerName);
           console.log(`   Database: ${dbBinding.type} (worker-specific)`);
           if (dbBinding.type === 'hyperdrive') {
-            const flatHyperdriveConfigs = flattenHyperdriveConfigs(dbBinding.config as any);
+            const flatHyperdriveConfigs = flattenHyperdriveConfigs(dbBinding.config);
             const bindingNames = flatHyperdriveConfigs.map((cfg) => cfg.binding);
             console.log(`   Hyperdrive bindings: ${bindingNames.join(', ')}`);
           } else if (dbBinding.type === 'd1') {

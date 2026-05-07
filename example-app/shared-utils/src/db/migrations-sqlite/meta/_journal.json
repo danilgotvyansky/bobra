@@ -8,6 +8,13 @@
       "when": 1773352539057,
       "tag": "0000_colorful_scalphunter",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1778114496210,
+      "tag": "0001_lumpy_cammi",
+      "breakpoints": true
     }
   ]
 }
