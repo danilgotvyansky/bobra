@@ -27,10 +27,10 @@ export const apiTokenListRowSchema = v.intersect([
 
 export const apiTokenListRowsSchema = v.array(apiTokenListRowSchema);
 
-export const createTokenRequestSchema = v.partial(v.pick(apiTokenSchema, ['name', 'ipAddresses', 'expiresAt']));
+export const createTokenRequestSchema = v.partial(v.pick(apiTokenSchema, ['name', 'expiresAt']));
 
 export const createTokenResponseDataSchema = v.intersect([
-  v.partial(v.pick(apiTokenSchema, ['uid', 'name', 'ipAddresses', 'createdAt', 'lastUsedAt', 'expiresAt'])),
+  v.partial(v.pick(apiTokenSchema, ['uid', 'name', 'createdAt', 'lastUsedAt', 'expiresAt'])),
   v.object({
     token: v.string(),
   })

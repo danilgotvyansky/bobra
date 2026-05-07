@@ -86,7 +86,6 @@ export async function findTokenByHash(
         expiresAt: schema.tokensSqlite.expiresAt,
         createdAt: schema.tokensSqlite.createdAt,
         lastUsedAt: schema.tokensSqlite.lastUsedAt,
-        ipAddresses: schema.tokensSqlite.ipAddresses,
         initToken: schema.tokensSqlite.initToken
       }).from(schema.tokensSqlite) as TokenRecordInput[];
     } else if (isPostgresContext(ctx)) {
@@ -97,7 +96,6 @@ export async function findTokenByHash(
         expiresAt: schema.tokens.expiresAt,
         createdAt: schema.tokens.createdAt,
         lastUsedAt: schema.tokens.lastUsedAt,
-        ipAddresses: schema.tokens.ipAddresses,
         initToken: schema.tokens.initToken
       }).from(schema.tokens) as TokenRecordInput[];
     } else {

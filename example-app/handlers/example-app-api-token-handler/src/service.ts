@@ -26,11 +26,19 @@ export async function createToken(body: InferInput<typeof createTokenRequestSche
 
     const { token, record } = await createPublicApiToken({
       name: body.name ?? undefined,
-      ...(expiresAtTimestamp !== undefined && { expiresAt: expiresAtTimestamp }),
-      ipAddresses: Array.isArray(body.ipAddresses) ? body.ipAddresses : undefined
+      ...(expiresAtTimestamp !== undefined && { expiresAt: expiresAtTimestamp })
     });
 
-    const validatedRecord = parse(apiTokenSchema, record);
+    const validatedRecord = parse(apiTokenSchema, {
+      uid: record.uid,
+      name: record.name,
+      tokenHash: record.tokenHash,
+      tokenSalt: record.tokenSalt,
+      createdAt: record.createdAt,
+      lastUsedAt: record.lastUsedAt,
+      expiresAt: record.expiresAt,
+      initToken: record.initToken,
+    });
     await insertToken(env, validatedRecord);
 
     const res: CreateTokenResponseData = { uid: record.uid, token };

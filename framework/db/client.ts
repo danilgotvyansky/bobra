@@ -33,7 +33,6 @@ export type TokenPgColumns = {
   expiresAt: AnyPgColumn;
   createdAt: AnyPgColumn;
   lastUsedAt: AnyPgColumn;
-  ipAddresses: AnyPgColumn;
   initToken: AnyPgColumn;
 };
 
@@ -44,7 +43,6 @@ export type TokenSQLiteColumns = {
   expiresAt: AnySQLiteColumn;
   createdAt: AnySQLiteColumn;
   lastUsedAt: AnySQLiteColumn;
-  ipAddresses: AnySQLiteColumn;
   initToken: AnySQLiteColumn;
 };
 

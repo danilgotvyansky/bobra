@@ -26,31 +26,6 @@ function normalizeTimestamp(value: Date | string | null): string | null {
   return date.toISOString();
 }
 
-function normalizeIpAddresses(value: unknown): string[] | null {
-  if (value === null) {
-    return null;
-  }
-
-  if (Array.isArray(value)) {
-    return value.filter((entry): entry is string => typeof entry === 'string');
-  }
-
-  if (typeof value !== 'string') {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(value);
-    if (Array.isArray(parsed)) {
-      return parsed.filter((entry): entry is string => typeof entry === 'string');
-    }
-  } catch {
-    return null;
-  }
-
-  return null;
-}
-
 export async function insertToken(env: AppEnvBindings, record: APIToken) {
   const ctx = getDatabaseContext(env, schema);
   if (isSQLite(ctx)) {
@@ -60,7 +35,6 @@ export async function insertToken(env: AppEnvBindings, record: APIToken) {
       name: record.name || null,
       tokenHash: record.tokenHash,
       tokenSalt: record.tokenSalt,
-      ipAddresses: record.ipAddresses ? JSON.stringify(record.ipAddresses) : null,
       initToken: record.initToken ? 1 : 0,
       ...(record.createdAt ? { createdAt: new Date(record.createdAt).toISOString() } : {}),
       ...(record.lastUsedAt ? { lastUsedAt: new Date(record.lastUsedAt).toISOString() } : {}),
@@ -75,7 +49,6 @@ export async function insertToken(env: AppEnvBindings, record: APIToken) {
     name: record.name || null,
     tokenHash: record.tokenHash,
     tokenSalt: record.tokenSalt,
-    ipAddresses: record.ipAddresses ?? null,
     initToken: Boolean(record.initToken),
     ...(record.createdAt ? { createdAt: new Date(record.createdAt) } : {}),
     ...(record.lastUsedAt ? { lastUsedAt: new Date(record.lastUsedAt) } : {}),
@@ -91,7 +64,6 @@ export async function getToken(env: AppEnvBindings, uid: string) {
       .select({
         uid: schema.tokensSqlite.uid,
         name: schema.tokensSqlite.name,
-        ipAddresses: schema.tokensSqlite.ipAddresses,
         createdAt: schema.tokensSqlite.createdAt,
         lastUsedAt: schema.tokensSqlite.lastUsedAt,
         expiresAt: schema.tokensSqlite.expiresAt,
@@ -102,7 +74,6 @@ export async function getToken(env: AppEnvBindings, uid: string) {
       .select({
         uid: schema.tokens.uid,
         name: schema.tokens.name,
-        ipAddresses: schema.tokens.ipAddresses,
         createdAt: schema.tokens.createdAt,
         lastUsedAt: schema.tokens.lastUsedAt,
         expiresAt: schema.tokens.expiresAt,
@@ -123,7 +94,6 @@ export async function getToken(env: AppEnvBindings, uid: string) {
     createdAt,
     expiresAt,
     lastUsedAt: normalizeTimestamp(token.lastUsedAt),
-    ipAddresses: normalizeIpAddresses(token.ipAddresses),
   };
 }
 
@@ -163,7 +133,6 @@ export async function listTokens(env: AppEnvBindings) {
     const tokens = await db.select({
       uid: schema.tokensSqlite.uid,
       name: schema.tokensSqlite.name,
-      ipAddresses: schema.tokensSqlite.ipAddresses,
       createdAt: schema.tokensSqlite.createdAt,
       lastUsedAt: schema.tokensSqlite.lastUsedAt,
       expiresAt: schema.tokensSqlite.expiresAt,
@@ -175,7 +144,6 @@ export async function listTokens(env: AppEnvBindings) {
       createdAt: normalizeTimestamp(token.createdAt),
       lastUsedAt: normalizeTimestamp(token.lastUsedAt),
       expiresAt: normalizeTimestamp(token.expiresAt),
-      ipAddresses: normalizeIpAddresses(token.ipAddresses),
     }));
   }
 
@@ -183,7 +151,6 @@ export async function listTokens(env: AppEnvBindings) {
   const tokens = await db.select({
     uid: schema.tokens.uid,
     name: schema.tokens.name,
-    ipAddresses: schema.tokens.ipAddresses,
     createdAt: schema.tokens.createdAt,
     lastUsedAt: schema.tokens.lastUsedAt,
     expiresAt: schema.tokens.expiresAt,
@@ -195,6 +162,5 @@ export async function listTokens(env: AppEnvBindings) {
     createdAt: normalizeTimestamp(token.createdAt),
     lastUsedAt: normalizeTimestamp(token.lastUsedAt),
     expiresAt: normalizeTimestamp(token.expiresAt),
-    ipAddresses: normalizeIpAddresses(token.ipAddresses),
   }));
 }

@@ -8,7 +8,6 @@ import {
   varchar,
   boolean as pgBoolean,
   timestamp,
-  jsonb,
   index as pgIndex,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
@@ -18,7 +17,6 @@ export const tokens = pgTable('tokens', {
   name: varchar('name', { length: 255 }),
   tokenHash: varchar('token_hash', { length: 128 }).notNull(),
   tokenSalt: varchar('token_salt', { length: 64 }).notNull(),
-  ipAddresses: jsonb('ip_addresses'),
   expiresAt: timestamp('expires_at').notNull().default(sql`CURRENT_TIMESTAMP + INTERVAL '90 days'`),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   lastUsedAt: timestamp('last_used_at'),
@@ -32,7 +30,6 @@ export const tokensSqlite = sqliteTable('tokens', {
   name: text('name'),
   tokenHash: text('token_hash').notNull(),
   tokenSalt: text('token_salt').notNull(),
-  ipAddresses: text('ip_addresses').$type<string | null>(),
   expiresAt: text('expires_at').notNull().default(sql`(datetime('now', '+90 days'))`),
   createdAt: text('created_at').notNull().default(sql`(CURRENT_TIMESTAMP)`),
   lastUsedAt: text('last_used_at').$type<string | null>(),
