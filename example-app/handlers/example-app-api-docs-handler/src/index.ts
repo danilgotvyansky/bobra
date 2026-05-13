@@ -5,7 +5,7 @@
  * - Dynamically discovers and collects OpenAPI specifications from all handlers
  * - Serves Swagger UI, Scalar API Reference and Markdown for LLMs
  */
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { swaggerUI } from '@hono/swagger-ui';
 import {
   getLogger,
@@ -20,52 +20,101 @@ import {
 } from '@danylohotvianskyi/bobra-framework/batteries/openapi';
 import type { Env } from './types';
 import { Scalar } from '@scalar/hono-api-reference';
-import { createMarkdownFromOpenApi } from '@scalar/openapi-to-markdown'
+import { createMarkdownFromOpenApi } from '@scalar/openapi-to-markdown';
+
+type HandlerContext = Context<{ Bindings: Record<string, unknown> }>;
+
+interface LlmsCacheEntry {
+  markdown: string;
+  expiresAt: number;
+  pathCount: number;
+}
+
+const DEFAULT_LLMS_SCALAR_TIMEOUT_MS = 12000;
+const LLMS_CACHE_TTL_MS = 60000;
+
+let llmsCache: LlmsCacheEntry | null = null;
+let llmsRenderInFlight: Promise<LlmsCacheEntry> | null = null;
+
+function getOpenApiPathCount(openapi: Record<string, unknown>): number {
+  const paths = openapi.paths;
+  return isObjectRecord(paths) ? Object.keys(paths).length : 0;
+}
+
+function getLlmsScalarTimeoutMs(env: Env): number {
+  const configuredTimeout = Number(env.LLMS_SCALAR_TIMEOUT_MS || DEFAULT_LLMS_SCALAR_TIMEOUT_MS);
+  return Number.isFinite(configuredTimeout) && configuredTimeout > 0
+    ? configuredTimeout
+    : DEFAULT_LLMS_SCALAR_TIMEOUT_MS;
+}
+
+async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+      })
+    ]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
+
+async function buildMergedOpenApiDocument(c: HandlerContext): Promise<Record<string, unknown>> {
+  const env = c.env as Env;
+  const discovery = (c.get as (key: string) => unknown)('serviceDiscovery');
+  const handlerNames = collectHandlerNames(discovery);
+
+  getLogger().debug('OpenAPI merge: handlers selected', { handlers: Array.from(handlerNames) });
+
+  const handlerNameList = Array.from(handlerNames);
+  const results = await Promise.allSettled(
+    handlerNameList.map(async (name) => {
+      try {
+        const res = await serviceFetch(env, name, '/openapi', {}, c);
+        getLogger().debug('OpenAPI merge: serviceFetch returned', { target: name, ok: res.ok, status: res.status });
+        if (!res.ok) throw new Error(`status ${res.status}`);
+        return await res.json();
+      } catch (err) {
+        const e = err instanceof Error ? err : new Error(String(err));
+        getLogger().warn(`Failed to fetch OpenAPI for handler '${name}'`, {
+          error: e.message,
+          stack: e.stack
+        });
+        return null;
+      }
+    })
+  );
+
+  const specs = results
+    .map(r => (r.status === 'fulfilled' ? r.value : null))
+    .filter(Boolean);
+
+  const failed = results
+    .map((r, i) => ({ r, name: handlerNameList[i] }))
+    .filter(x => x.r.status === 'rejected' || x.r.value == null)
+    .map(x => x.name);
+
+  getLogger().debug('OpenAPI merge: collected specs', { count: specs.length, failed });
+
+  const merged = mergeOpenApiSpecs(specs, {
+    title: 'Example App API',
+    description: 'API documentation',
+    version: '1.0.0',
+  });
+  getLogger().debug('OpenAPI merge: merged done', { pathCount: getOpenApiPathCount(merged) });
+
+  return merged;
+}
 
 const routes: AppHandler['routes'] = new Hono<{ Bindings: Record<string, unknown> }>()
   // Return merged OpenAPI spec across all handlers
   .get('/openapi', async (c) => {
-    const env = c.env as Env;
-    const discovery = (c.get as (key: string) => unknown)('serviceDiscovery');
-    const handlerNames = collectHandlerNames(discovery);
-
-    getLogger().debug('OpenAPI merge: handlers selected', { handlers: Array.from(handlerNames) });
-
-    const results = await Promise.allSettled(
-      Array.from(handlerNames).map(async (name) => {
-        try {
-          const res = await serviceFetch(env, name, '/openapi');
-          getLogger().debug('OpenAPI merge: serviceFetch returned', { target: name, ok: res.ok, status: res.status });
-          if (!res.ok) throw new Error(`status ${res.status}`);
-          return await res.json();
-        } catch (err) {
-          const e = err instanceof Error ? err : new Error(String(err));
-          getLogger().warn(`Failed to fetch OpenAPI for handler '${name}'`, {
-            error: e.message,
-            stack: e.stack
-          });
-          return null;
-        }
-      })
-    );
-
-    const specs = results
-      .map(r => (r.status === 'fulfilled' ? r.value : null))
-      .filter(Boolean);
-
-    const failed = results
-      .map((r, i) => ({ r, name: Array.from(handlerNames)[i] }))
-      .filter(x => x.r.status === 'rejected' || x.r.value == null)
-      .map(x => x.name);
-
-    getLogger().debug('OpenAPI merge: collected specs', { count: specs.length, failed });
-
-    const merged = mergeOpenApiSpecs(specs, {
-      title: 'Example App API',
-      description: 'API documentation',
-      version: '1.0.0',
-    });
-    getLogger().debug('OpenAPI merge: merged done', { pathCount: Object.keys(merged.paths || {}).length });
+    const merged = await buildMergedOpenApiDocument(c);
     return c.json(merged, 200);
   })
 
@@ -79,17 +128,72 @@ const routes: AppHandler['routes'] = new Hono<{ Bindings: Record<string, unknown
    * @see https://llmstxt.org/
    */
   .get('/llms.txt', async (c) => {
-    const url = new URL('openapi', c.req.url);
-    const res = await fetch(url.toString());
-    if (!res.ok) return c.text(`Failed to load OpenAPI (${res.status})`, 502);
-
-    const openapi: unknown = await res.json();
-    if (!isObjectRecord(openapi)) {
-      return c.text('Invalid OpenAPI payload', 502);
+    const now = Date.now();
+    if (llmsCache && llmsCache.expiresAt > now) {
+      return c.text(llmsCache.markdown, 200, {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Cache-Control': 'no-store',
+        'X-LLMS-Cache': 'hit',
+        'X-LLMS-Renderer': 'scalar',
+        'X-LLMS-Path-Count': String(llmsCache.pathCount),
+      });
     }
 
-    const markdown = await createMarkdownFromOpenApi(openapi);
-    return c.text(markdown, 200, { 'Content-Type': 'text/plain; charset=utf-8' });
+    const env = c.env as Env;
+    const markdownTimeoutMs = getLlmsScalarTimeoutMs(env);
+
+    if (!llmsRenderInFlight) {
+      llmsRenderInFlight = (async () => {
+        const openapi = await buildMergedOpenApiDocument(c);
+        const pathCount = getOpenApiPathCount(openapi);
+        if (pathCount === 0) {
+          throw new Error('Merged OpenAPI has zero paths');
+        }
+
+        const markdown = await withTimeout(
+          createMarkdownFromOpenApi(openapi),
+          markdownTimeoutMs,
+          'llms.txt markdown generation'
+        );
+
+        return {
+          markdown,
+          expiresAt: Date.now() + LLMS_CACHE_TTL_MS,
+          pathCount,
+        };
+      })().finally(() => {
+        llmsRenderInFlight = null;
+      });
+    }
+
+    try {
+      const entry = await llmsRenderInFlight;
+      llmsCache = entry;
+      return c.text(entry.markdown, 200, {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Cache-Control': 'no-store',
+        'X-LLMS-Cache': 'miss',
+        'X-LLMS-Renderer': 'scalar',
+        'X-LLMS-Path-Count': String(entry.pathCount),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      getLogger().warn('llms.txt failed to render from merged OpenAPI', { error: message });
+      const isPathIssue = message.includes('zero paths');
+      return c.text(
+        isPathIssue
+          ? 'OpenAPI paths are temporarily unavailable. Please retry.'
+          : 'Failed to render llms.txt from OpenAPI. Please retry.',
+        503,
+        {
+          'Content-Type': 'text/plain; charset=utf-8',
+          'Cache-Control': 'no-store',
+          'X-LLMS-Cache': 'miss',
+          'X-LLMS-Renderer': 'scalar',
+          'X-LLMS-Path-Count': isPathIssue ? '0' : 'unknown',
+        }
+      );
+    }
   })
   ;
 
