@@ -17,7 +17,7 @@ export const tokens = pgTable('tokens', {
   name: varchar('name', { length: 255 }),
   tokenHash: varchar('token_hash', { length: 128 }).notNull(),
   tokenSalt: varchar('token_salt', { length: 64 }).notNull(),
-  expiresAt: timestamp('expires_at').notNull().default(sql`CURRENT_TIMESTAMP + INTERVAL '90 days'`),
+  expiresAt: timestamp('expires_at'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   lastUsedAt: timestamp('last_used_at'),
   initToken: pgBoolean('init_token').notNull().default(false)
@@ -30,7 +30,7 @@ export const tokensSqlite = sqliteTable('tokens', {
   name: text('name'),
   tokenHash: text('token_hash').notNull(),
   tokenSalt: text('token_salt').notNull(),
-  expiresAt: text('expires_at').notNull().default(sql`(datetime('now', '+90 days'))`),
+  expiresAt: text('expires_at'),
   createdAt: text('created_at').notNull().default(sql`(CURRENT_TIMESTAMP)`),
   lastUsedAt: text('last_used_at').$type<string | null>(),
   initToken: integer('init_token').notNull().default(0)

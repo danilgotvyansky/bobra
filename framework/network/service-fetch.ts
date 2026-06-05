@@ -13,6 +13,10 @@ import {
 import { Context } from 'hono';
 import type { RouterEnv } from './router';
 
+type RequestableWorkerApp = {
+  request: (input: string | Request, init?: RequestInit, env?: RouterEnv) => Promise<Response>;
+};
+
 // Convenience function for simple handler calls
 export async function callHandler(
   // Replaced WorkerEnv with RouterEnv for consistency
@@ -128,7 +132,7 @@ export async function serviceFetch(
       throw new Error(`Handler '${instance.name}' not found in discovery`);
     }
 
-    const workerApp = appWorkerRegistry.getMainApp(workerName as string);
+    const workerApp = appWorkerRegistry.getMainApp(workerName as string) as RequestableWorkerApp | undefined | null;
     if (!workerApp) {
       throw new Error(`Worker app '${workerName}' not found in registry`);
     }

@@ -5,7 +5,7 @@ export interface TokenRecord {
   uid: string;
   tokenHash: string;
   tokenSalt: string;
-  expiresAt: Date;
+  expiresAt: Date | null;
   lastUsedAt?: Date;
   ipAddresses?: string[];
   initToken?: boolean | number;
@@ -19,7 +19,7 @@ export interface TokenValidationResult {
   reason?: string;
   tokenInfo?: {
     uid: string;
-    expiresAt: Date;
+    expiresAt: Date | null;
     lastUsedAt?: Date;
     ipAddresses?: string[];
     initToken?: boolean;
@@ -41,7 +41,9 @@ export async function validateToken(
       };
     }
 
-    if (tokenRecord.expiresAt < new Date()) {
+    const isInit = tokenRecord.initToken === true || tokenRecord.initToken === 1;
+
+    if (tokenRecord.expiresAt !== null && tokenRecord.expiresAt < new Date()) {
       return {
         valid: false,
         reason: 'Token expired'
@@ -62,7 +64,6 @@ export async function validateToken(
 
     if (isValid) {
       await updateTokenLastUsed(provider, tokenRecord.uid);
-      const isInit = tokenRecord.initToken === true || tokenRecord.initToken === 1;
       return {
         valid: true,
         tokenInfo: {

@@ -17,10 +17,14 @@ The Init Token is generated automatically during the **first database migration*
 
 - **Detection**: The migration script checks the `init_token_created` table.
 - **Output**: If it's the first run, the token is printed to the console log (STDOUT).
+- **Expiration**: Init Tokens are created with `expires_at = NULL` and do not expire.
 - **One-Time**: Once marked as created in the database, the framework will NEVER generate it again.
 
 > [!WARNING]
 > **Capture the token immediately!** If you lose the Init Token, you will need to manually reset the `init_token_created` table in your database and re-run migrations to generate a new one.
+
+> [!NOTE]
+> Init Tokens are expected to be non-expiring. Do not add an expiration timestamp to Init Token rows in application migrations or seed data. Bobra still rejects an expired finite token if one already exists with an `expires_at` timestamp in the past.
 
 ### Usage
 The Init Token is used as a standard Bearer token in the `Authorization` header:
@@ -37,7 +41,17 @@ Beyond the Init Token, Bobra supports standard Public API Tokens for programmati
 Tokens are stored with:
 - `token_hash`: SHA-256 hash of the token.
 - `token_salt`: Unique salt for hashing.
+- `expires_at`: Optional expiration timestamp. `NULL` means the token never expires.
 - `init_token`: A boolean flag identifying if this is the bootstrap token.
+
+### Expiration Semantics
+`createPublicApiToken()` supports three expiration modes:
+
+- Omit `expiresAt` for a regular API token to use the default 90-day lifetime.
+- Pass a future timestamp in `expiresAt` to create a token with an explicit finite lifetime.
+- Pass `expiresAt: null` to create a token that never expires.
+
+When `initToken: true` is passed and `expiresAt` is omitted, Bobra creates a non-expiring Init Token by default. Token validation treats `expires_at = NULL` as valid until the token is deleted or otherwise revoked.
 
 ## Service Isolation
 For security reasons, the standard `api-token-handler` (which manages regular token CRUD) is **prohibited** from creating or modifying Init Tokens. Init Tokens can only be created by the low-level migration logic, ensuring they cannot be easily compromised via standard API endpoints.

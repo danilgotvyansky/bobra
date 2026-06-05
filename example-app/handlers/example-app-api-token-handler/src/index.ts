@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { describeRoute } from 'hono-openapi';
 import { vValidator } from '@hono/valibot-validator';
 import { parse } from 'valibot';
@@ -22,7 +22,15 @@ import { deleteToken, getToken, listTokens } from './db-utils';
 import { createToken } from './service';
 import { TokenValidationProvider } from '@danylohotvianskyi/bobra-framework';
 
-const routes = new Hono()
+type HandlerContext = Context<{ Bindings: Record<string, unknown> }>;
+type ApiTokenRoutes = AppHandler['routes'] & {
+  use: (path: string, ...handlers: unknown[]) => ApiTokenRoutes;
+  get: (path: string, ...handlers: unknown[]) => ApiTokenRoutes;
+  post: (path: string, ...handlers: unknown[]) => ApiTokenRoutes;
+  delete: (path: string, ...handlers: unknown[]) => ApiTokenRoutes;
+};
+
+const routes = (new Hono() as ApiTokenRoutes)
   .use('*', ensureApiToken({
     getTokenValidationProvider: (c) => {
       const ctx = getDatabaseContext(c.env, schema);
@@ -48,7 +56,7 @@ const routes = new Hono()
         },
       },
     }),
-    async (c) => {
+    async (c: HandlerContext) => {
       const env = c.env as WorkerEnv;
       const tokens = parse(apiTokenListRowsSchema, await listTokens(env));
       const filtered = tokens
@@ -80,7 +88,7 @@ const routes = new Hono()
       },
     }),
     vValidator('param', tokenUidParamsSchema),
-    async (c) => {
+    async (c: HandlerContext) => {
       try {
         const env = c.env as WorkerEnv;
         const tokenUid = c.req.valid('param').tokenUid;
@@ -119,7 +127,7 @@ const routes = new Hono()
       },
     }),
     vValidator('json', createTokenRequestSchema),
-    async (c) => {
+    async (c: HandlerContext) => {
       const env = c.env as WorkerEnv;
       const body = c.req.valid('json');
       return await createToken(body, env);
@@ -145,7 +153,7 @@ const routes = new Hono()
       },
     }),
     vValidator('param', tokenUidParamsSchema),
-    async (c) => {
+    async (c: HandlerContext) => {
       const env = c.env as WorkerEnv;
       const tokenUid = c.req.valid('param').tokenUid;
       try {

@@ -23,7 +23,7 @@ export function generateSalt(length: number = TOKEN_CONSTANTS.SALT_BYTES): strin
 
 export interface PublicApiTokenOptions {
   name?: string;
-  expiresAt?: number;
+  expiresAt?: number | null;
   ipAddresses?: string[];
   initToken?: boolean;
 }
@@ -38,7 +38,7 @@ export async function createPublicApiToken(options: PublicApiTokenOptions): Prom
     ipAddresses?: string[];
     createdAt: string;
     lastUsedAt: string | null;
-    expiresAt: string;
+    expiresAt: string | null;
     initToken: boolean;
   };
 }> {
@@ -51,7 +51,9 @@ export async function createPublicApiToken(options: PublicApiTokenOptions): Prom
     initToken = false
   } = options;
 
-  const finalExpiresAt = expiresAt ?? defaultExpiresAt;
+  const finalExpiresAt = expiresAt === undefined
+    ? (initToken ? null : defaultExpiresAt)
+    : expiresAt;
 
   const token = generateSecureToken();
   const tokenSalt = generateSalt();
@@ -65,7 +67,7 @@ export async function createPublicApiToken(options: PublicApiTokenOptions): Prom
     ipAddresses,
     createdAt: new Date(now).toISOString(),
     lastUsedAt: null,
-    expiresAt: new Date(finalExpiresAt).toISOString(),
+    expiresAt: finalExpiresAt === null ? null : new Date(finalExpiresAt).toISOString(),
     initToken
   };
 

@@ -41,7 +41,7 @@ export async function hashToken(token: string, salt: string): Promise<string> {
 
 export type MatchedTokenRecord = Omit<TokenRecordRaw, 'createdAt' | 'expiresAt' | 'lastUsedAt' | 'ipAddresses'> & {
   createdAt: Date;
-  expiresAt: Date;
+  expiresAt: Date | null;
   lastUsedAt?: Date;
   ipAddresses?: string[];
 };
@@ -118,14 +118,14 @@ export async function findTokenByHash(
           const createdAt = normalizeDate(record.createdAt);
           const expiresAt = normalizeDate(record.expiresAt);
 
-          if (!createdAt || !expiresAt) {
+          if (!createdAt) {
             continue;
           }
 
           return {
             ...record,
             createdAt,
-            expiresAt,
+            expiresAt: expiresAt ?? null,
             lastUsedAt: normalizeDate(record.lastUsedAt),
             ipAddresses: parseIps(record.ipAddresses)
           };

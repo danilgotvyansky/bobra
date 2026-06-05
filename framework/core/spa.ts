@@ -1,6 +1,12 @@
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import { getLogger, initializeLogger } from '../logging/logger';
 import type { AppHandler } from './discovery';
+
+type SpaEnv = { Bindings: Record<string, unknown> };
+type SpaHono = Hono<SpaEnv> & {
+  all: (path: string, handler: (c: Context<SpaEnv>) => unknown) => SpaHono;
+};
 
 interface AssetBinding {
   fetch(request: Request): Promise<Response>;
@@ -43,7 +49,7 @@ export function createSpaHandler(options: SpaHandlerOptions): AppHandler {
     ignoreWorkerBasePath = false
   } = options;
 
-  const app = new Hono<{ Bindings: Record<string, unknown> }>();
+  const app = new Hono<SpaEnv>() as SpaHono;
 
   // Handle all requests under this handler's path
   app.all('*', async (c) => {

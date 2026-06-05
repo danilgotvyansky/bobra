@@ -86,8 +86,9 @@ Bobra includes a built-in mechanism for generating an **Initial Instance Token (
 ### How it works
 1.  During the first migration, the `migrate` script checks if an init token has been created.
 2.  It uses the `init_token_created` singleton table to track status.
-3.  If missing, it generates a cryptographically secure token and prints it to the console (STDOUT).
-4.  **Security**: The init token is ONLY generated during migrations. Handlers cannot create it. Store this token securely; it is your "root" access to the API.
+3.  If missing, it generates a cryptographically secure token, stores it with `expires_at = NULL`, and prints it to the console (STDOUT).
+4.  **Expiration**: Init tokens do not expire. A nullable `expires_at` column is the supported representation for never-expiring tokens.
+5.  **Security**: The init token is ONLY generated during migrations. Handlers cannot create it. Store this token securely; it is your "root" access to the API.
 
 ## pgEdge & Location Routing
 
