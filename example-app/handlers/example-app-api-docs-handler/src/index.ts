@@ -23,6 +23,9 @@ import { Scalar } from '@scalar/hono-api-reference';
 import { createMarkdownFromOpenApi } from '@scalar/openapi-to-markdown';
 
 type HandlerContext = Context<{ Bindings: Record<string, unknown> }>;
+type ApiDocsRoutes = AppHandler['routes'] & {
+  get: (path: string, handler: unknown) => ApiDocsRoutes;
+};
 
 interface LlmsCacheEntry {
   markdown: string;
@@ -111,9 +114,9 @@ async function buildMergedOpenApiDocument(c: HandlerContext): Promise<Record<str
   return merged;
 }
 
-const routes: AppHandler['routes'] = new Hono<{ Bindings: Record<string, unknown> }>()
+const routes: AppHandler['routes'] = (new Hono<{ Bindings: Record<string, unknown> }>() as ApiDocsRoutes)
   // Return merged OpenAPI spec across all handlers
-  .get('/openapi', async (c) => {
+  .get('/openapi', async (c: HandlerContext) => {
     const merged = await buildMergedOpenApiDocument(c);
     return c.json(merged, 200);
   })
@@ -127,7 +130,7 @@ const routes: AppHandler['routes'] = new Hono<{ Bindings: Record<string, unknown
    * Register a route to serve the Markdown for LLMs
    * @see https://llmstxt.org/
    */
-  .get('/llms.txt', async (c) => {
+  .get('/llms.txt', async (c: HandlerContext) => {
     const now = Date.now();
     if (llmsCache && llmsCache.expiresAt > now) {
       return c.text(llmsCache.markdown, 200, {

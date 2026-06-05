@@ -161,6 +161,14 @@ export interface CreateRouterAppOptions {
   buildPublicConfig?: (config: AppConfig, env: RouterEnv) => Record<string, unknown>;
 }
 
+type RouterHono = Hono<{ Bindings: RouterEnv }> & {
+  basePath: (path: string) => RouterHono;
+  use: (path: string, ...handlers: unknown[]) => RouterHono;
+  get: (path: string, handler: (c: Context<{ Bindings: RouterEnv }>) => unknown) => RouterHono;
+  all: (path: string, handler: (c: Context<{ Bindings: RouterEnv }>) => unknown) => RouterHono;
+  fetch: (request: Request, env?: RouterEnv, ctx?: ExecutionContext) => Promise<Response> | Response;
+};
+
 /**
  * Create a Hono router app populated with standard routes:
  * health, public config, service proxy, and catch-all route forwarding.
@@ -174,8 +182,8 @@ export function createRouterApp(
   const { workerName } = options;
 
   const app = routerBasePath === '/'
-    ? new Hono<{ Bindings: RouterEnv }>()
-    : new Hono<{ Bindings: RouterEnv }>().basePath(routerBasePath);
+    ? new Hono<{ Bindings: RouterEnv }>() as RouterHono
+    : (new Hono<{ Bindings: RouterEnv }>() as RouterHono).basePath(routerBasePath);
 
   app.use('*', simpleHonoLogger(loggingConfig));
 
@@ -376,7 +384,7 @@ export function createRouterApp(
     }
   });
 
-  return app;
+  return app as unknown as Hono<{ Bindings: RouterEnv }>;
 }
 
 /**
@@ -405,7 +413,7 @@ export function createRouterWorker(options: CreateRouterAppOptions) {
         };
         initializeLogger(routerLoggingConfig, 'router', options.workerName);
 
-        const app = createRouterApp(config, options, routerLoggingConfig as LoggerConfig);
+        const app = createRouterApp(config, options, routerLoggingConfig as LoggerConfig) as unknown as RouterHono;
 
         return app.fetch(request, env, ctx);
       } catch (error) {

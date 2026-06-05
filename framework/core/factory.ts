@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import { cors } from 'hono/cors';
 import { appWorkerRegistry, type AppHandler } from './discovery';
 import { initializeLogger, getLogger, LogStack, LogLevel } from '../logging/logger';
@@ -23,6 +24,13 @@ import type { MessageBatch, ExecutionContext, ScheduledController } from '@cloud
 const OPENAPI_METHODS = ['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'] as const;
 type OpenApiMethod = typeof OPENAPI_METHODS[number];
 type HonoBindingsEnv = { Bindings: Record<string, unknown>; Variables?: Record<string, unknown> };
+type HonoHandler<E extends HonoBindingsEnv> = (c: Context<E>) => unknown;
+type RoutableHono<E extends HonoBindingsEnv> = Hono<E> & {
+  use: (path: string, ...handlers: unknown[]) => RoutableHono<E>;
+  get: (path: string, handler: HonoHandler<E>) => RoutableHono<E>;
+  route: (path: string, app: unknown) => RoutableHono<E>;
+  fetch: (request: Request, env?: E['Bindings'], ctx?: WorkerExecutionCtx) => Promise<Response> | Response;
+};
 
 type JsonNode = string | number | boolean | null | JsonNode[] | { [key: string]: JsonNode };
 type QueuePayload = Record<string, string | number | boolean | null>;
@@ -150,7 +158,7 @@ export interface WorkerEnv {
 
 // Create a new worker instance with common middleware
 export async function createWorker(env?: WorkerEnv, options?: WorkerOptions): Promise<AppWorker> {
-  const app = new Hono<HonoBindingsEnv>();
+  const app = new Hono<HonoBindingsEnv>() as RoutableHono<HonoBindingsEnv>;
 
   const config = await loadConfig(env || {});
   validateConfig(config);
@@ -192,7 +200,7 @@ export async function createWorker(env?: WorkerEnv, options?: WorkerOptions): Pr
 
   // Worker-level OpenAPI with router base path prefixing
   (() => {
-    const specApp = new Hono<HonoBindingsEnv>();
+    const specApp = new Hono<HonoBindingsEnv>() as RoutableHono<HonoBindingsEnv>;
     const routerBase = getRouterBasePath(config);
     // Mount the worker app under router base path so generated paths include router base
     specApp.route(routerBase === '/' ? '/' : routerBase, app);
@@ -289,7 +297,7 @@ export async function createWorker(env?: WorkerEnv, options?: WorkerOptions): Pr
 
 // Core worker class that manages handlers and their lifecycle
 export class AppWorker {
-  private app: Hono<HonoBindingsEnv>;
+  private app: RoutableHono<HonoBindingsEnv>;
   private handlers: AppHandler[] = [];
   private config: AppConfig;
   private workerName: string;
@@ -298,7 +306,7 @@ export class AppWorker {
   private initialized = false;
   private startupStack = new LogStack();
 
-  constructor(app: Hono<HonoBindingsEnv>, config: AppConfig, workerName: string, basePath: string, options?: WorkerOptions) {
+  constructor(app: RoutableHono<HonoBindingsEnv>, config: AppConfig, workerName: string, basePath: string, options?: WorkerOptions) {
     this.app = app;
     this.config = config;
     this.workerName = workerName;
@@ -491,7 +499,7 @@ export class AppWorker {
 
       if (handler.name !== 'api-docs') {
         (() => {
-          const specApp = new Hono<HonoBindingsEnv>();
+          const specApp = new Hono<HonoBindingsEnv>() as RoutableHono<HonoBindingsEnv>;
           const routerBase = getRouterBasePath(this.config);
           const prefix = routerBase === '/' ? handlerPath : `${routerBase}${handlerPath}`;
           specApp.route(prefix, handler.routes);

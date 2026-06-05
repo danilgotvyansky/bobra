@@ -187,7 +187,7 @@ export function honoLogger(options: HonoLoggerOptions = {}) {
     const headers: Record<string, string> = {};
 
     if (opts.logHeaders) {
-      c.req.raw.headers.forEach((v, k) => {
+      c.req.raw.headers.forEach((v: string, k: string) => {
         headers[k] = v;
       });
     }
