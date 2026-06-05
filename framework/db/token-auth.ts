@@ -9,7 +9,7 @@ export const tokenRecordRawSchema = v.object({
   uid: v.string(),
   tokenHash: v.string(),
   tokenSalt: v.string(),
-  expiresAt: dateLikeSchema,
+  expiresAt: v.union([dateLikeSchema, v.null()]),
   createdAt: dateLikeSchema,
   lastUsedAt: v.optional(v.union([dateLikeSchema, v.null()])),
   ipAddresses: v.optional(ipAddressesSchema),
@@ -24,7 +24,7 @@ export type TokenRecordInput = {
   uid: string;
   tokenHash: string;
   tokenSalt: string;
-  expiresAt: Date | string | number;
+  expiresAt: Date | string | number | null;
   createdAt: Date | string | number;
   lastUsedAt?: Date | string | number | null;
   ipAddresses?: string[] | string | null;
