@@ -6,6 +6,7 @@ import {
 import {
   pgTable,
   varchar,
+  uuid,
   boolean as pgBoolean,
   timestamp,
   index as pgIndex,
@@ -13,7 +14,7 @@ import {
 import { sql } from 'drizzle-orm';
 
 export const tokens = pgTable('tokens', {
-  uid: varchar('uid', { length: 36 }).primaryKey(),
+  uid: uuid('uid').primaryKey(),
   name: varchar('name', { length: 255 }),
   tokenHash: varchar('token_hash', { length: 128 }).notNull(),
   tokenSalt: varchar('token_salt', { length: 64 }).notNull(),
