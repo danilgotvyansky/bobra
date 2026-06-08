@@ -1,4 +1,5 @@
 import { webcrypto } from 'crypto';
+import { generatePrimaryKey } from '../../db/primary-key';
 import { hashToken } from './hash';
 
 export const TOKEN_CONSTANTS = {
@@ -60,7 +61,7 @@ export async function createPublicApiToken(options: PublicApiTokenOptions): Prom
   const tokenHash = await hashToken(token, tokenSalt);
 
   const record = {
-    uid: webcrypto.randomUUID(),
+    uid: generatePrimaryKey(),
     name,
     tokenHash,
     tokenSalt,
