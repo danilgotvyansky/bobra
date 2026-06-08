@@ -9,6 +9,7 @@ describe('createPublicApiToken', () => {
   it('creates non-expiring init tokens by default', async () => {
     const { record } = await createPublicApiToken({ initToken: true, name: 'Initial Instance Token' });
 
+    expect(record.uid).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     expect(record.initToken).toBe(true);
     expect(record.expiresAt).toBeNull();
   });
