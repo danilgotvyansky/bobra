@@ -222,7 +222,7 @@ export async function createWorker(env?: WorkerEnv, options?: WorkerOptions): Pr
     for (const specDef of specDefs) {
       const specPath = specDef.path || '/openapi';
       app.get(specPath, async (c) => {
-        const full = await generateSpecs(specApp, specOptions, undefined, c) as OpenAPIV3.Document;
+        const full = await generateSpecs(specApp, specOptions as Parameters<typeof generateSpecs>[1]) as OpenAPIV3.Document;
         const { excludeEndpoint, excludeTags, pruneComponents: specPrune, securitySchemes } = specDef;
         const hasExclusions = !!excludeEndpoint || (!!excludeTags && excludeTags.length > 0);
 
@@ -528,7 +528,7 @@ export class AppWorker {
           for (const specDef of specDefs) {
             const specPath = specDef.path || '/openapi';
             this.app.get(`${handlerPath}${specPath}`, async (c) => {
-              const full = await generateSpecs(specApp, specOptions, undefined, c) as OpenAPIV3.Document;
+              const full = await generateSpecs(specApp, specOptions as Parameters<typeof generateSpecs>[1]) as OpenAPIV3.Document;
               const { excludeEndpoint, excludeTags, pruneComponents: specPrune, securitySchemes } = specDef;
               const hasExclusions = !!excludeEndpoint || (!!excludeTags && excludeTags.length > 0);
 

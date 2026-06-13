@@ -1,4 +1,5 @@
 import { Hono, type Context } from 'hono';
+import type { InferInput } from 'valibot';
 import { describeRoute } from 'hono-openapi';
 import { vValidator } from '@hono/valibot-validator';
 import { parse } from 'valibot';
@@ -22,7 +23,10 @@ import { deleteToken, getToken, listTokens } from './db-utils';
 import { createToken } from './service';
 import { TokenValidationProvider } from '@danylohotvianskyi/bobra-framework';
 
-type HandlerContext = Context<{ Bindings: Record<string, unknown> }>;
+type TokenUidParamsInput = InferInput<typeof tokenUidParamsSchema>;
+type CreateTokenRequestInput = InferInput<typeof createTokenRequestSchema>;
+type TokenUidParamContext = Context<{ Bindings: Record<string, unknown> }, string, { out: { param: TokenUidParamsInput } }>;
+type CreateTokenContext = Context<{ Bindings: Record<string, unknown> }, string, { out: { json: CreateTokenRequestInput } }>;
 type ApiTokenRoutes = AppHandler['routes'] & {
   use: (path: string, ...handlers: unknown[]) => ApiTokenRoutes;
   get: (path: string, ...handlers: unknown[]) => ApiTokenRoutes;
@@ -56,7 +60,7 @@ const routes = (new Hono() as ApiTokenRoutes)
         },
       },
     }),
-    async (c: HandlerContext) => {
+    async (c: TokenUidParamContext) => {
       const env = c.env as WorkerEnv;
       const tokens = parse(apiTokenListRowsSchema, await listTokens(env));
       const filtered = tokens
@@ -88,7 +92,7 @@ const routes = (new Hono() as ApiTokenRoutes)
       },
     }),
     vValidator('param', tokenUidParamsSchema),
-    async (c: HandlerContext) => {
+    async (c: TokenUidParamContext) => {
       try {
         const env = c.env as WorkerEnv;
         const tokenUid = c.req.valid('param').tokenUid;
@@ -127,7 +131,7 @@ const routes = (new Hono() as ApiTokenRoutes)
       },
     }),
     vValidator('json', createTokenRequestSchema),
-    async (c: HandlerContext) => {
+    async (c: CreateTokenContext) => {
       const env = c.env as WorkerEnv;
       const body = c.req.valid('json');
       return await createToken(body, env);
@@ -153,7 +157,7 @@ const routes = (new Hono() as ApiTokenRoutes)
       },
     }),
     vValidator('param', tokenUidParamsSchema),
-    async (c: HandlerContext) => {
+    async (c: TokenUidParamContext) => {
       const env = c.env as WorkerEnv;
       const tokenUid = c.req.valid('param').tokenUid;
       try {
