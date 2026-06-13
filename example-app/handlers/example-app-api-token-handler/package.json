@@ -10,8 +10,8 @@
   "dependencies": {
     "@example-app/shared-utils": "workspace:*",
     "@danylohotvianskyi/bobra-framework": "catalog:",
-    "drizzle-orm": "^0.44.3",
-    "drizzle-valibot": "^0.4.2",
+    "drizzle-orm": "catalog:",
+    "drizzle-valibot": "catalog:",
     "hono": "catalog:",
     "hono-openapi": "catalog:",
     "@hono/valibot-validator": "catalog:",
@@ -20,6 +20,6 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:",
-    "typescript": "^5.6.0"
+    "typescript": "catalog:"
   }
 }

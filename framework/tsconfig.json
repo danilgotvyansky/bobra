@@ -1,9 +1,9 @@
 {
   "compilerOptions": {
-    "target": "es2022",
+    "target": "ES2025",
     "module": "es2022", // Critical for hono
     "lib": [
-      "es2022"
+      "ES2025"
     ],
     "strict": true,
     "esModuleInterop": true,

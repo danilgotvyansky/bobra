@@ -1,6 +1,6 @@
 {
   "name": "@danylohotvianskyi/bobra-framework",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Bobra Framework - Generic Cloudflare Workers Framework",
   "author": "Danylo Hotvianskyi",
   "license": "Apache-2.0",
@@ -83,28 +83,40 @@
     "prepack": "pnpm run build"
   },
   "dependencies": {
-    "@cloudflare/workers-types": "^4.20260307.1",
-    "@hono/valibot-validator": "^0.5.2",
+    "@cloudflare/workers-types": "4.20260608.1",
+    "@hono/valibot-validator": "0.6.1",
     "@types/pg": "^8.11.2",
-    "@valibot/to-json-schema": "^1.3.0",
+    "@valibot/to-json-schema": "1.7.1",
     "dotenv": "^16.4.1",
-    "drizzle-orm": "^0.44.3",
-    "drizzle-valibot": "^0.4.2",
-    "hono": "^4.11.9",
-    "hono-openapi": "^0.4.8",
+    "drizzle-orm": "0.45.2",
+    "drizzle-valibot": "0.4.2",
+    "hono": "4.12.24",
+    "hono-openapi": "1.3.0",
     "js-yaml": "^4.1.0",
     "openapi-types": "^12.1.3",
     "pg": "^8.16.3",
     "postgres": "^3.2.0",
     "ts-node": "^10.9.2",
     "uuidv7": "^1.2.1",
-    "valibot": "^1.1.0"
+    "valibot": "1.4.1"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
-    "@types/node": "^20.19.4",
-    "drizzle-kit": "^0.31.4",
-    "typescript": "^5.6.0",
-    "vitest": "4.1.5"
+    "@types/node": "^25.9.2",
+    "drizzle-kit": "0.31.10",
+    "typescript": "6.0.3",
+    "vitest": "4.1.8"
+  },
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "pnpm": {
+    "overrides": {
+      "esbuild": "0.28.0",
+      "vite": "8.0.16",
+      "vitest": "4.1.8",
+      "wrangler": "4.98.0",
+      "@cloudflare/vitest-pool-workers": "0.16.13"
+    }
   }
 }

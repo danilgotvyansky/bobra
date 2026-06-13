@@ -11,8 +11,8 @@
   "dependencies": {
     "@cloudflare/workers-types": "catalog:",
     "dotenv": "^16.4.1",
-    "drizzle-orm": "^0.44.3",
-    "drizzle-valibot": "^0.4.2",
+    "drizzle-orm": "catalog:",
+    "drizzle-valibot": "catalog:",
     "valibot": "catalog:",
     "pg": "^8.16.3",
     "postgres": "^3.2.0",
@@ -20,9 +20,9 @@
     "@danylohotvianskyi/bobra-framework": "catalog:"
   },
   "devDependencies": {
-    "@types/node": "^20.19.4",
+    "@types/node": "^25.9.2",
     "@types/pg": "^8.11.2",
-    "drizzle-kit": "^0.31.4",
-    "typescript": "^5.6.0"
+    "drizzle-kit": "catalog:",
+    "typescript": "catalog:"
   }
 }
