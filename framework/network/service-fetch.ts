@@ -17,6 +17,11 @@ type RequestableWorkerApp = {
   request: (input: string | Request, init?: RequestInit, env?: RouterEnv) => Promise<Response>;
 };
 
+type CfEnv = RouterEnv & {
+  __cfContinent?: string;
+  __cfColo?: string;
+};
+
 // Convenience function for simple handler calls
 export async function callHandler(
   // Replaced WorkerEnv with RouterEnv for consistency
@@ -104,6 +109,27 @@ export async function serviceFetch(
     return initCopy;
   };
 
+  const ensureForwardHeaders = (init?: RequestInit): RequestInit => {
+    const initCopy = ensureAuthHeader(init);
+    const headers = new Headers(initCopy.headers || {});
+    const cfEnv = env as CfEnv;
+    const ctxContinent = ctx?.req?.header('X-CF-Continent');
+    const ctxColo = ctx?.req?.header('X-CF-Colo');
+
+    if (!headers.has('X-CF-Continent')) {
+      const continent = ctxContinent || cfEnv.__cfContinent;
+      if (continent) headers.set('X-CF-Continent', continent);
+    }
+
+    if (!headers.has('X-CF-Colo')) {
+      const colo = ctxColo || cfEnv.__cfColo;
+      if (colo) headers.set('X-CF-Colo', colo);
+    }
+
+    initCopy.headers = headers;
+    return initCopy;
+  };
+
   getLogger().debug(`serviceFetch: target=${instance.name}, worker=${workerName}`, {
     target: instance.name,
     type: instance.type,
@@ -165,10 +191,10 @@ export async function serviceFetch(
 
     try {
       if (options instanceof Request) {
-        const init = ensureAuthHeader({ method: options.method, headers: options.headers, body: options.body });
+        const init = ensureForwardHeaders({ method: options.method, headers: options.headers, body: options.body });
         return await workerApp.request(fullPath, init, env);
       } else {
-        const init = ensureAuthHeader({ method: options.method || 'GET', headers: options.headers, body: options.body });
+        const init = ensureForwardHeaders({ method: options.method || 'GET', headers: options.headers, body: options.body });
         return await workerApp.request(fullPath, init, env);
       }
     } catch (error) {
@@ -186,7 +212,7 @@ export async function serviceFetch(
         uri,
         options: redactOptions(options)
       });
-      const init = ensureAuthHeader(options);
+      const init = ensureForwardHeaders(options);
       const url = uri.startsWith('http') ? uri : `http://internal${uri.startsWith('/') ? uri : '/' + uri}`;
       return await (instance.binding as { fetch: (url: string, init?: RequestInit) => Promise<Response> }).fetch(url, init);
     } catch (error) {
@@ -207,7 +233,7 @@ export async function serviceFetch(
       : `${instance.external_url}/`;
     const relativeUri = uri.startsWith('/') ? uri.slice(1) : uri;
     const url = new URL(relativeUri, baseUrl);
-    const init = ensureAuthHeader(options);
+    const init = ensureForwardHeaders(options);
     return await fetch(url.toString(), init);
   }
 
@@ -248,7 +274,7 @@ export async function serviceFetch(
         options: redactOptions(options)
       });
       const url = new URL(routerPath, routerService.external_url);
-      const init = ensureAuthHeader(options);
+      const init = ensureForwardHeaders(options);
       return await fetch(url.toString(), init);
     } else {
       getLogger().debug(`serviceFetch: using service binding to router for handler`, {
@@ -258,7 +284,7 @@ export async function serviceFetch(
         handlerName: instance.name,
         options: redactOptions(options)
       });
-      const init = ensureAuthHeader(options);
+      const init = ensureForwardHeaders(options);
       const url = routerPath.startsWith('http') ? routerPath : `http://internal${routerPath.startsWith('/') ? routerPath : '/' + routerPath}`;
       return await (routerBinding as { fetch: (url: string, init?: RequestInit) => Promise<Response> }).fetch(url, init);
     }
@@ -293,7 +319,7 @@ export async function serviceFetch(
         options: redactOptions(options)
       });
       const url = new URL(serviceProxyPath, routerService.external_url);
-      const init = ensureAuthHeader(options);
+      const init = ensureForwardHeaders(options);
       return await fetch(url.toString(), init);
     } else {
       getLogger().debug(`serviceFetch: using service binding to router for service proxy`, {
@@ -302,7 +328,7 @@ export async function serviceFetch(
         serviceName: instance.name,
         options: redactOptions(options)
       });
-      const init = ensureAuthHeader(options);
+      const init = ensureForwardHeaders(options);
       const url = serviceProxyPath.startsWith('http') ? serviceProxyPath : `http://internal${serviceProxyPath.startsWith('/') ? serviceProxyPath : '/' + serviceProxyPath}`;
       return await (routerBinding as { fetch: (url: string, init?: RequestInit) => Promise<Response> }).fetch(url, init);
     }

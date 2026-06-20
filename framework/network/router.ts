@@ -18,6 +18,13 @@ export interface RouterEnv {
   [key: string]: unknown;
 }
 
+function forwardCfLocationHeaders(request: Request & { cf?: { continent?: string; colo?: string } }, headers: Headers): void {
+  const continent = headers.get('X-CF-Continent') || request.cf?.continent;
+  const colo = headers.get('X-CF-Colo') || request.cf?.colo;
+  if (continent) headers.set('X-CF-Continent', continent);
+  if (colo) headers.set('X-CF-Colo', colo);
+}
+
 export function getServicesFromRoutes(routes: RouteConfig[]): string[] {
   const services = new Set<string>();
   routes.forEach(route => services.add(route.service));
@@ -92,10 +99,7 @@ export async function handleServiceProxy(
       const newHeaders = new Headers(c.req.raw.headers);
       newHeaders.set('X-Forwarded-By', workerName);
       newHeaders.set('X-Original-Path', c.req.path);
-      // Forward CF location data for pgEdge geo-routing
-      const cf = (c.req.raw as Request & { cf?: { continent?: string; colo?: string } }).cf;
-      if (cf?.continent) newHeaders.set('X-CF-Continent', cf.continent);
-      if (cf?.colo) newHeaders.set('X-CF-Colo', cf.colo);
+      forwardCfLocationHeaders(c.req.raw as Request & { cf?: { continent?: string; colo?: string } }, newHeaders);
 
       response = await fetch(targetUrl.toString(), {
         method: c.req.method,
@@ -356,10 +360,7 @@ export function createRouterApp(
 
       const newHeaders = new Headers(c.req.raw.headers);
       newHeaders.set('X-Forwarded-Url', c.req.url);
-      // Forward CF location data for pgEdge geo-routing
-      const cf = (c.req.raw as Request & { cf?: { continent?: string; colo?: string } }).cf;
-      if (cf?.continent) newHeaders.set('X-CF-Continent', cf.continent);
-      if (cf?.colo) newHeaders.set('X-CF-Colo', cf.colo);
+      forwardCfLocationHeaders(c.req.raw as Request & { cf?: { continent?: string; colo?: string } }, newHeaders);
       const orgUid = c.req.query('org_uid');
       if (orgUid) {
         newHeaders.set('X-Org-Context', orgUid);
