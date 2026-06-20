@@ -176,7 +176,7 @@ git_diff.txt
 
 .config/
 
-# local config and generated wrangler config is ignored 
+# local config and generated wrangler config is ignored
 wrangler.jsonc
 config.local.yml
 
@@ -184,3 +184,4 @@ config.local.yml
 *.syncthing.*
 *.sync-conflict*
 *.tmp
+.init-prompts/

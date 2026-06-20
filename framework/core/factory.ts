@@ -43,6 +43,7 @@ type SecuritySchemeMap = Record<string, OpenAPIV3.SecuritySchemeObject | OpenAPI
 interface RequestWithCf extends Request {
   cf?: Record<string, unknown> & {
     continent?: string;
+    colo?: string;
   };
 }
 
@@ -152,6 +153,7 @@ export interface WorkerEnv {
   CONFIG_CONTENT?: string;
   WORKER_NAME?: string;
   __cfContinent?: string;
+  __cfColo?: string;
   // Bindings are deployment-specific and can include D1/KV/R2/DO namespaces.
   [key: string]: unknown;
 }
@@ -688,6 +690,8 @@ export class AppWorker {
           // Header takes priority: request.cf reflects the worker's colo, not the original client
           const cfContinent = request.headers?.get?.('X-CF-Continent') || request.cf?.continent;
           if (cfContinent) mergedEnv.__cfContinent = cfContinent;
+          const cfColo = request.headers?.get?.('X-CF-Colo') || request.cf?.colo;
+          if (cfColo) mergedEnv.__cfColo = cfColo;
 
           await self.initialize(mergedEnv);
           return await self.app.fetch(request, mergedEnv, ctx);
@@ -753,6 +757,8 @@ export function createCloudflareWorker(
         const requestWithCf = request as RequestWithCf;
         const cfContinent = request.headers?.get?.('X-CF-Continent') || requestWithCf.cf?.continent;
         if (cfContinent) workerEnv.__cfContinent = cfContinent;
+        const cfColo = request.headers?.get?.('X-CF-Colo') || requestWithCf.cf?.colo;
+        if (cfColo) workerEnv.__cfColo = cfColo;
 
         const worker = await createWorker(workerEnv, options);
 
