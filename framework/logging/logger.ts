@@ -39,6 +39,7 @@ export interface LoggerConfig {
 }
 
 const SENSITIVE_KEYS = ['password', 'token', 'secret', 'authorization', 'key', 'auth', 'cookie', 'credential', 'access_token', 'refresh_token'];
+const SAFE_AUTH_METADATA_KEYS = new Set(['auth_context_ms', 'auth_path']);
 const BEARER_REGEX = /(Bearer\s+)([a-zA-Z0-9\-_.]+)/gi;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -61,7 +62,7 @@ function sanitize(obj: unknown): unknown {
     const newObj: Record<string, unknown> = {};
     for (const key in obj as Record<string, unknown>) {
       const lowerKey = key.toLowerCase();
-      if (SENSITIVE_KEYS.some(k => lowerKey.includes(k))) {
+      if (!SAFE_AUTH_METADATA_KEYS.has(lowerKey) && SENSITIVE_KEYS.some(k => lowerKey.includes(k))) {
         newObj[key] = '***';
       } else {
         newObj[key] = sanitize((obj as Record<string, unknown>)[key]);
