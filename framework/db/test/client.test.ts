@@ -306,6 +306,100 @@ describe('db/client failover', () => {
     expect(pool).toBeInstanceOf(Pool);
   });
 
+  it('falls back when a checked-out transaction client fails on begin', async () => {
+    const calls: string[] = [];
+    const options: PgFailoverOptions = {
+      enabled: true,
+      connectionTimeoutMs: 2000,
+      warnLogging: false,
+    };
+
+    const candidates: PostgresCandidate[] = [
+      { bindingName: 'POSTGRES_EU', binding: { connectionString: 'postgres://eu' }, location: 'eu' },
+      { bindingName: 'POSTGRES_US', binding: { connectionString: 'postgres://us' }, location: 'us' },
+    ];
+
+    const pool = new FailoverPgPool(
+      candidates,
+      options,
+      () => createMockPoolAdapter(async () => {
+        throw new Error('pool connect should not be used before the candidate is proven healthy');
+      }),
+      (candidate) => {
+        if (candidate.bindingName === 'POSTGRES_EU') {
+          return createMockDirectClient(async (query) => {
+            calls.push(`eu-query:${String(query)}`);
+            const error = new Error('Connection terminated unexpectedly');
+            (error as Error & { code?: string }).code = 'ECONNRESET';
+            throw error;
+          }, async () => {
+            calls.push('eu-connect');
+          });
+        }
+
+        return createMockDirectClient(async (query) => {
+          calls.push(`us-query:${String(query)}`);
+          return createQueryResult([{ ok: 1 }]);
+        }, async () => {
+          calls.push('us-connect');
+        });
+      },
+    );
+
+    const client = await pool.connect();
+    const beginResult = await client.query('begin');
+    const selectResult = await client.query('select 1');
+    client.release();
+
+    expect(beginResult.rows).toEqual([{ ok: 1 }]);
+    expect(selectResult.rows).toEqual([{ ok: 1 }]);
+    expect(calls).toEqual([
+      'eu-connect',
+      'eu-query:begin',
+      'us-connect',
+      'us-query:begin',
+      'us-query:select 1',
+    ]);
+  });
+
+  it('does not fall back after a transaction has started', async () => {
+    const calls: string[] = [];
+    const options: PgFailoverOptions = {
+      enabled: true,
+      connectionTimeoutMs: 2000,
+      warnLogging: false,
+    };
+
+    const candidates: PostgresCandidate[] = [
+      { bindingName: 'POSTGRES_EU', binding: { connectionString: 'postgres://eu' }, location: 'eu' },
+      { bindingName: 'POSTGRES_US', binding: { connectionString: 'postgres://us' }, location: 'us' },
+    ];
+
+    const pool = new FailoverPgPool(
+      candidates,
+      options,
+      () => createMockPoolAdapter(async () => {
+        throw new Error('pool connect should not be used before the candidate is proven healthy');
+      }),
+      () => createMockDirectClient(async (query) => {
+        calls.push(String(query));
+        if (query === 'select 1') {
+          const error = new Error('Connection terminated unexpectedly');
+          (error as Error & { code?: string }).code = 'ECONNRESET';
+          throw error;
+        }
+        return createQueryResult([{ ok: 1 }]);
+      }),
+    );
+
+    const client = await pool.connect();
+    await client.query('begin');
+    await expect(client.query('select 1')).rejects.toThrow('Connection terminated unexpectedly');
+    client.release();
+
+    expect(calls).toEqual(['begin', 'select 1']);
+  });
+
   it('switches to pooled connections after a candidate proves healthy', async () => {
     const calls: string[] = [];
     const options: PgFailoverOptions = {

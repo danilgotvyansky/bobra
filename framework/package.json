@@ -1,6 +1,6 @@
 {
   "name": "@danylohotvianskyi/bobra-framework",
-  "version": "0.4.3",
+  "version": "0.5.0",
   "description": "Bobra Framework - Generic Cloudflare Workers Framework",
   "author": "Danylo Hotvianskyi",
   "license": "Apache-2.0",
