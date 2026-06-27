@@ -89,6 +89,7 @@ export function isTransientConnectionOrUnavailableError(error: unknown): boolean
 
 type PoolEventName = Parameters<Pool['on']>[0];
 type PoolListener = Parameters<Pool['on']>[1];
+type QueryArgs = Parameters<PoolClient['query']>;
 
 export interface FailoverPoolAdapter {
   query: (...args: unknown[]) => Promise<QueryResult<QueryResultRow>>;
@@ -112,6 +113,20 @@ export function attachPoolErrorLogger(pool: FailoverPoolAdapter, context: Record
       message: readErrorMessage(error),
     });
   });
+}
+
+function isBeginQuery(args: QueryArgs): boolean {
+  const firstArg = args[0];
+  if (typeof firstArg === 'string') {
+    return firstArg.trim().toLowerCase() === 'begin';
+  }
+
+  if (firstArg && typeof firstArg === 'object') {
+    const text = (firstArg as { text?: unknown }).text;
+    return typeof text === 'string' && text.trim().toLowerCase() === 'begin';
+  }
+
+  return false;
 }
 
 export class FailoverPgPool extends Pool {
@@ -214,6 +229,138 @@ export class FailoverPgPool extends Pool {
     return directClient as unknown as PoolClient;
   }
 
+  private wrapTransactionStartFailoverClient(
+    initialClient: PoolClient,
+    initialCandidateIndex: number
+  ): PoolClient {
+    const logger = getLogger();
+    let activeClient = initialClient;
+    let activeCandidateIndex = initialCandidateIndex;
+    let activeClientReleased = false;
+    let transactionStarted = false;
+    let released = false;
+
+    const releaseActiveClient = (err?: Error | boolean): void => {
+      if (activeClientReleased) return;
+      activeClient.release(err);
+      activeClientReleased = true;
+    };
+
+    const queryWithBeginFailover = async <R extends QueryResultRow = QueryResultRow>(
+      ...args: QueryArgs
+    ): Promise<QueryResult<R>> => {
+      if (transactionStarted || !isBeginQuery(args)) {
+        const queryFn = activeClient.query.bind(activeClient) as (...queryArgs: QueryArgs) => Promise<QueryResult<R>>;
+        return await queryFn(...args);
+      }
+
+      let lastError: Error | undefined;
+      for (let index = activeCandidateIndex; index < this.candidates.length; index += 1) {
+        const candidate = this.candidates[index]!;
+
+        if (index !== activeCandidateIndex || activeClientReleased) {
+          try {
+            activeClient = await this.connectCandidate(candidate);
+            activeCandidateIndex = index;
+            activeClientReleased = false;
+          } catch (connectError) {
+            lastError = toError(connectError);
+            this.invalidateCandidate(candidate);
+            const hasNextCandidate = index < this.candidates.length - 1;
+            const shouldFallback = hasNextCandidate && isTransientConnectionOrUnavailableError(connectError);
+
+            if (!shouldFallback) {
+              break;
+            }
+
+            if (this.failoverOptions.warnLogging) {
+              const nextCandidate = this.candidates[index + 1]!;
+              logger.warn('[getDb] Falling back to another PostgreSQL candidate after transient transaction reconnect error', {
+                operation: 'transaction_reconnect',
+                failedBinding: candidate.bindingName,
+                failedLocation: candidate.location || null,
+                fallbackBinding: nextCandidate.bindingName,
+                fallbackLocation: nextCandidate.location || null,
+                locationChanged: (candidate.location || null) !== (nextCandidate.location || null),
+                errorCode: readErrorCode(connectError) || null,
+                message: readErrorMessage(connectError),
+              });
+            }
+
+            continue;
+          }
+        }
+
+        try {
+          const queryFn = activeClient.query.bind(activeClient) as (...queryArgs: QueryArgs) => Promise<QueryResult<R>>;
+          const result = await queryFn(...args);
+          transactionStarted = true;
+          activeCandidateIndex = index;
+          return result;
+        } catch (error) {
+          lastError = toError(error);
+          this.invalidateCandidate(candidate);
+          releaseActiveClient();
+
+          const hasNextCandidate = index < this.candidates.length - 1;
+          const shouldFallback = hasNextCandidate && isTransientConnectionOrUnavailableError(error);
+          if (!shouldFallback) {
+            break;
+          }
+
+          const nextCandidate = this.candidates[index + 1]!;
+          if (this.failoverOptions.warnLogging) {
+            logger.warn('[getDb] Falling back to another PostgreSQL candidate after transient transaction begin error', {
+              operation: 'transaction_begin',
+              failedBinding: candidate.bindingName,
+              failedLocation: candidate.location || null,
+              fallbackBinding: nextCandidate.bindingName,
+              fallbackLocation: nextCandidate.location || null,
+              locationChanged: (candidate.location || null) !== (nextCandidate.location || null),
+              errorCode: readErrorCode(error) || null,
+              message: readErrorMessage(error),
+            });
+          }
+        }
+      }
+
+      const errorToThrow = lastError ?? new Error('Postgres transaction begin failed without an error payload');
+      logger.error('[getDb] PostgreSQL failover exhausted for transaction begin', errorToThrow, {
+        candidates: this.candidates.map(formatCandidateLabel),
+        transientClassified: isTransientConnectionOrUnavailableError(errorToThrow),
+      });
+      throw errorToThrow;
+    };
+
+    const releaseWrappedClient = ((err?: Error | boolean) => {
+      if (released) return;
+      released = true;
+      releaseActiveClient(err);
+    }) as PoolClient['release'];
+
+    return new Proxy(initialClient, {
+      get(_target: PoolClient, property: string | symbol): unknown {
+        if (property === 'query') {
+          return queryWithBeginFailover as PoolClient['query'];
+        }
+
+        if (property === 'release') {
+          return releaseWrappedClient;
+        }
+
+        const value = Reflect.get(activeClient as object, property);
+        if (typeof value === 'function') {
+          return value.bind(activeClient);
+        }
+
+        return value;
+      },
+      set(_target: PoolClient, property: string | symbol, value: unknown): boolean {
+        return Reflect.set(activeClient as object, property, value);
+      },
+    }) as PoolClient;
+  }
+
   async query<R extends QueryResultRow = QueryResultRow>(...args: unknown[]): Promise<QueryResult<R>> {
     const logger = getLogger();
     let lastError: Error | undefined;
@@ -274,7 +421,8 @@ export class FailoverPgPool extends Pool {
       const candidate = this.candidates[index]!;
       attemptedBindings.push(candidate.bindingName);
       try {
-        return await this.connectCandidate(candidate);
+        const client = await this.connectCandidate(candidate);
+        return this.wrapTransactionStartFailoverClient(client, index);
       } catch (error) {
         lastError = toError(error);
         this.invalidateCandidate(candidate);
