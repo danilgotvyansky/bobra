@@ -139,6 +139,24 @@ export interface AssetsConfig {
   html_handling?: 'auto-trailing-slash' | 'force-trailing-slash' | 'drop-trailing-slash' | 'none';
 }
 
+export type WorkerPlacementConfig =
+  | {
+    mode: 'off' | 'smart';
+    hint?: string;
+  }
+  | {
+    mode: 'targeted';
+    region: string;
+  }
+  | {
+    mode: 'targeted';
+    host: string;
+  }
+  | {
+    mode: 'targeted';
+    hostname: string;
+  };
+
 export interface WorkerConfig {
   name: string;
   port?: number;
@@ -165,6 +183,7 @@ export interface WorkerConfig {
   vars?: Record<string, string | number | boolean | JSONValue>;
   cf_routes?: CloudflareRoute[];
   assets?: AssetsConfig;
+  placement?: WorkerPlacementConfig;
   observability?: {
     logs?: {
       enabled?: boolean;
@@ -194,6 +213,7 @@ export interface RouterConfig {
   vars?: Record<string, string | number | boolean | JSONValue>;
   cf_routes?: CloudflareRoute[];
   assets?: AssetsConfig;
+  placement?: WorkerPlacementConfig;
   observability?: {
     logs?: {
       enabled?: boolean;
@@ -216,6 +236,7 @@ export interface AppConfig {
   logging?: LoggerConfig;
   pgEdge: PgEdgeConfig;
   vars?: Record<string, string | number | boolean | JSONValue>;
+  placement?: WorkerPlacementConfig;
   workers: Record<string, WorkerConfig>;
   router: RouterConfig;
 }

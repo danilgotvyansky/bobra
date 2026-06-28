@@ -42,6 +42,31 @@ vars:
   API_BASE_URL: "https://api.myapp.com"
 ```
 
+#### `placement`
+Global Cloudflare Worker placement applied to the router and every worker unless overridden.
+
+```yaml
+placement:
+  mode: "smart"
+```
+
+To disable placement globally:
+
+```yaml
+placement:
+  mode: "off"
+```
+
+To use explicit targeted placement hints:
+
+```yaml
+placement:
+  mode: "targeted"
+  region: "aws:eu-central-1"
+```
+
+Targeted placement accepts one of `region`, `host`, or `hostname`.
+
 ### Worker Configuration
 
 The `workers` map defines individual Cloudflare Workers and their handlers, databases, and dependencies.
@@ -65,7 +90,11 @@ workers:
     services:
       - binding: "ROUTER"
         service: "main-router"
+    placement:
+      mode: "off"
 ```
+
+Worker-level `placement` overrides global `placement` for that worker.
 
 ### Postgres Binding Shapes
 
@@ -125,6 +154,9 @@ The `router` section configures the ingress worker that proxies traffic to other
 router:
   name: "main-router"
   base_path: "/"
+  placement:
+    mode: "targeted"
+    hostname: "api.myapp.com"
   routes:
     - path: "/api/users*"
       service: "users-worker"
@@ -132,6 +164,8 @@ router:
     - binding: "EXTERNAL_API"
       external_url: "https://api.external.com"
 ```
+
+Router-level `placement` overrides global `placement` for the router worker.
 
 ## Environment Variable Resolution
 
