@@ -15,6 +15,7 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import {
   type AppConfig,
+  type WorkerPlacementConfig,
   serviceToBindingName,
   getDatabaseBinding,
   getWorkerQueueBindings,
@@ -107,6 +108,7 @@ export interface WranglerConfig {
     zone_id?: string;
     zone_name?: string;
   }>;
+  placement?: WorkerPlacementConfig;
   workers_dev?: boolean;
   observability?: {
     logs?: {
@@ -180,6 +182,18 @@ function normalizePathValue(p?: string): string {
   if (!v.startsWith('/')) v = '/' + v;
   if (v.length > 1) v = v.replace(/\/+$/, '');
   return v;
+}
+
+function getPlacementConfig(
+  config: AppConfig,
+  workerType: string,
+  workerName: string
+): WorkerPlacementConfig | undefined {
+  if (workerType === 'router') {
+    return config.router?.placement ?? config.placement;
+  }
+
+  return config.workers?.[workerName]?.placement ?? config.placement;
 }
 
 export function generateWranglerConfig<
@@ -480,6 +494,11 @@ export function generateWranglerConfig<
     } else {
       wranglerConfig.workers_dev = false;
     }
+  }
+
+  const placement = getPlacementConfig(config, workerType, workerName);
+  if (placement) {
+    wranglerConfig.placement = placement;
   }
 
   const baseWranglerConfig = wranglerConfig as TWranglerConfig;
