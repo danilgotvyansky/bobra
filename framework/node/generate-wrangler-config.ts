@@ -21,6 +21,7 @@ import {
   getWorkerQueueBindings,
   getWorkerDbEngine,
   flattenHyperdriveConfigs,
+  getWorkerMetricsConfig,
 } from '../core/config.js';
 import { JSONValue } from 'hono/utils/types';
 import { gzipSync } from 'zlib';
@@ -54,6 +55,7 @@ export interface WranglerConfig {
   migrations?: Array<{
     tag: string;
     new_classes?: string[];
+    new_sqlite_classes?: string[];
     renamed_classes?: Array<{ from: string; to: string }>;
     deleted_classes?: string[];
   }>;
@@ -438,8 +440,19 @@ export function generateWranglerConfig<
       }
     }
 
-    if (workerConfig?.services && !workerConfig?.services.some(s => s.external_url)) {
-      wranglerConfig.services = workerConfig.services;
+    if (workerConfig?.services) {
+      const directServices = workerConfig.services.filter((service) => !service.external_url);
+      if (directServices.length > 0) wranglerConfig.services = directServices;
+    }
+
+    if (workerConfig?.handlers.includes('observability') && getWorkerMetricsConfig(config, workerName).enabled) {
+      const providerBindings = Object.entries(config.workers)
+        .filter(([providerName, provider]) => providerName !== workerName && getWorkerMetricsConfig(config, providerName).enabled)
+        .map(([providerName, provider]) => ({ binding: serviceToBindingName(providerName), service: provider.name || providerName }));
+      if (providerBindings.length > 0) {
+        wranglerConfig.services ??= [];
+        for (const provider of providerBindings) if (!wranglerConfig.services.some((service) => service.binding === provider.binding)) wranglerConfig.services.push(provider);
+      }
     }
 
     if (workerConfig?.kv_namespaces?.length) {
@@ -468,6 +481,18 @@ export function generateWranglerConfig<
           });
         }
       }
+    }
+
+    const metricsConfig = getWorkerMetricsConfig(config, workerName);
+    if (metricsConfig.enabled && metricsConfig.cache.enabled) {
+      const className = workerConfig?.handlers.includes('observability') ? 'BobraMetricsCoordinator' : 'BobraMetricsCache';
+      const binding = workerConfig?.handlers.includes('observability') ? 'BOBRA_METRICS_COORDINATOR' : 'BOBRA_METRICS_CACHE';
+      wranglerConfig.durable_objects ??= { bindings: [] };
+      if (!wranglerConfig.durable_objects.bindings.some((item) => item.name === binding)) wranglerConfig.durable_objects.bindings.push({ name: binding, class_name: className });
+      wranglerConfig.migrations ??= [];
+      const migration = wranglerConfig.migrations.find((item) => item.new_sqlite_classes !== undefined) || { tag: 'bobra-metrics-v1', new_sqlite_classes: [] };
+      if (!wranglerConfig.migrations.includes(migration)) wranglerConfig.migrations.push(migration);
+      if (!migration.new_sqlite_classes!.includes(className)) migration.new_sqlite_classes!.push(className);
     }
 
     const queueBindings = getWorkerQueueBindings(config, workerName);

@@ -184,6 +184,7 @@ export interface WorkerConfig {
   cf_routes?: CloudflareRoute[];
   assets?: AssetsConfig;
   placement?: WorkerPlacementConfig;
+  metrics?: Partial<MetricsConfig>;
   observability?: {
     logs?: {
       enabled?: boolean;
@@ -237,9 +238,48 @@ export interface AppConfig {
   pgEdge: PgEdgeConfig;
   vars?: Record<string, string | number | boolean | JSONValue>;
   placement?: WorkerPlacementConfig;
+  metrics?: MetricsConfig;
   workers: Record<string, WorkerConfig>;
   router: RouterConfig;
 }
+
+export interface MetricsCacheConfig {
+  enabled: boolean;
+  backend: 'durable-object';
+  freshness: string;
+  max_staleness: string;
+  provider_timeout: string;
+  force_refresh_cooldown: string;
+  adaptive: { enabled: boolean; recurring_request_count: number; recurring_window: string };
+  alarm: { enabled: boolean; retry_initial: string; retry_max: string; retry_multiplier: number; jitter_percent: number };
+  discovery: { refresh_interval: string };
+}
+
+export interface MetricsLabelsConfig {
+  source: { enabled: boolean; app: string; worker: string; handler: string };
+  static: Record<string, string | null>;
+}
+
+export interface MetricsConfig {
+  enabled: boolean;
+  endpoint_path: string;
+  /** Existing app init-token binding used only for stateless Worker-to-Worker collection. */
+  internal_token_binding?: string;
+  cache: MetricsCacheConfig;
+  labels: MetricsLabelsConfig;
+}
+
+export const defaultMetricsConfig: MetricsConfig = {
+  enabled: false,
+  endpoint_path: '/metrics',
+  cache: {
+    enabled: true, backend: 'durable-object', freshness: '60s', max_staleness: '120s', provider_timeout: '15s', force_refresh_cooldown: '10s',
+    adaptive: { enabled: true, recurring_request_count: 2, recurring_window: '120s' },
+    alarm: { enabled: true, retry_initial: '5s', retry_max: '5m', retry_multiplier: 2, jitter_percent: 10 },
+    discovery: { refresh_interval: '5m' },
+  },
+  labels: { source: { enabled: true, app: 'bobra_app', worker: 'bobra_worker', handler: 'bobra_handler' }, static: {} },
+};
 
 // Default configuration — apps should override these via their config.yml
 export const defaultConfig: AppConfig = {
@@ -260,6 +300,7 @@ export const defaultConfig: AppConfig = {
   },
   db_engine: 'postgres',
   vars: {},
+  metrics: defaultMetricsConfig,
   workers: {},
   router: {
     name: 'example-app-router-worker',
@@ -296,6 +337,7 @@ export function parseConfig(yamlContent: string, env?: Record<string, unknown>):
         ...parsed.pgEdge,
       },
       logging: parsed.logging,
+      metrics: mergeMetricsConfig(defaultMetricsConfig, parsed.metrics),
       vars: parsed.vars || {},
       workers: parsed.workers || {},
       router: {
@@ -315,6 +357,25 @@ export function parseConfig(yamlContent: string, env?: Record<string, unknown>):
     console.error('Failed to parse YAML configuration:', error);
     throw new Error(`Invalid YAML configuration: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
+}
+
+function mergeMetricsConfig(base: MetricsConfig, override?: Partial<MetricsConfig>): MetricsConfig {
+  return {
+    ...base, ...override,
+    cache: { ...base.cache, ...override?.cache, adaptive: { ...base.cache.adaptive, ...override?.cache?.adaptive }, alarm: { ...base.cache.alarm, ...override?.cache?.alarm }, discovery: { ...base.cache.discovery, ...override?.cache?.discovery } },
+    labels: { ...base.labels, ...override?.labels, source: { ...base.labels.source, ...override?.labels?.source }, static: { ...base.labels.static, ...override?.labels?.static } },
+  };
+}
+
+/** Effective metrics policy follows the same global -> worker hierarchy as logging. */
+export function getWorkerMetricsConfig(config: AppConfig, workerName: string): MetricsConfig {
+  // Generator callers receive raw YAML while Worker runtime receives parsed
+  // config. Start from defaults in both cases so partial global policy is safe.
+  const globalMetrics = mergeMetricsConfig(defaultMetricsConfig, config.metrics);
+  const effective = mergeMetricsConfig(globalMetrics, config.workers?.[workerName]?.metrics);
+  // Global enable is a master switch; a Worker opts in explicitly, matching logging's worker ownership.
+  effective.enabled = Boolean(globalMetrics.enabled && config.workers?.[workerName]?.metrics?.enabled);
+  return effective;
 }
 
 // Cache for parsed configuration to avoid repeated decompression/parsing
@@ -535,6 +596,11 @@ export function validateConfig(config: AppConfig): void {
   const allHandlerIds = new Set<string>();
   const allServiceIds = new Set<string>();
 
+  const metricsWorkers = Object.entries(config.workers || {}).filter(([workerName]) => getWorkerMetricsConfig(config, workerName).enabled);
+  if (metricsWorkers.length > 0 && !getWorkerMetricsConfig(config, metricsWorkers[0]![0]).internal_token_binding) {
+    throw new Error('Metrics-enabled workers require metrics.internal_token_binding for internal collection');
+  }
+
   for (const [workerName, worker] of Object.entries(config.workers || {})) {
     for (const handlerId of worker.handlers || []) {
       if (allHandlerIds.has(handlerId)) {
@@ -554,6 +620,17 @@ export function validateConfig(config: AppConfig): void {
       }
       allServiceIds.add(service.service);
     }
+  }
+
+  for (const [workerName, worker] of Object.entries(config.workers || {})) {
+    const metrics = getWorkerMetricsConfig(config, workerName);
+    if (!metrics.enabled) continue;
+    if (!worker.handlers?.length) throw new Error(`Metrics-enabled worker '${workerName}' must declare handlers`);
+    if (!metrics.endpoint_path.startsWith('/')) throw new Error(`Metrics endpoint_path for worker '${workerName}' must start with '/'`);
+    const durationKeys = [metrics.cache.freshness, metrics.cache.max_staleness, metrics.cache.provider_timeout, metrics.cache.force_refresh_cooldown, metrics.cache.adaptive.recurring_window, metrics.cache.alarm.retry_initial, metrics.cache.alarm.retry_max, metrics.cache.discovery.refresh_interval];
+    for (const value of durationKeys) if (!/^\d+(?:\.\d+)?(?:ms|s|m|h)$/.test(value)) throw new Error(`Invalid metrics duration '${value}' for worker '${workerName}'`);
+    if (metrics.cache.adaptive.recurring_request_count < 1 || metrics.cache.alarm.retry_multiplier < 1 || metrics.cache.alarm.jitter_percent < 0) throw new Error(`Invalid metrics retry/adaptive policy for worker '${workerName}'`);
+    if (!metrics.labels.source.app || !metrics.labels.source.worker || !metrics.labels.source.handler) throw new Error(`Metrics source labels for worker '${workerName}' must be non-empty`);
   }
 }
 

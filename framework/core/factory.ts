@@ -15,7 +15,9 @@ import {
   getRouterBasePath,
   getWorkerQueueBindings,
   getServiceDiscovery,
+  getWorkerMetricsConfig,
 } from './config';
+import { addMetricLabels, mergeMetricFamilies, parseMetricsDuration, serializePrometheus, type MetricFamily, type MetricsSnapshot } from '../batteries/metrics';
 import { serviceDiscoveryMiddleware } from '../network/service-discovery';
 import { generateSpecs } from 'hono-openapi';
 import type { OpenAPIV3 } from 'openapi-types';
@@ -39,6 +41,9 @@ type WorkerExecutionCtx = ExecutionContext;
 type ScheduledEvent = ScheduledController;
 type SchemaMap = Record<string, OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject>;
 type SecuritySchemeMap = Record<string, OpenAPIV3.SecuritySchemeObject | OpenAPIV3.ReferenceObject>;
+type MetricsCacheStub = { readSnapshot(key: string): Promise<MetricsSnapshot | undefined>; writeSnapshot(key: string, snapshot: MetricsSnapshot): Promise<void>; deleteSnapshot(key: string): Promise<void>; acquireLease(key: string, holder: string, ttlMs: number): Promise<boolean>; releaseLease(key: string, holder: string): Promise<void> };
+type MetricsCoordinatorStub = MetricsCacheStub & { readMergedSnapshot(): Promise<MetricsSnapshot | undefined>; refresh(): Promise<MetricsSnapshot>; scheduleNext(at: number): Promise<void> };
+type MetricsCacheNamespace = { getByName(name: string): MetricsCacheStub };
 
 interface RequestWithCf extends Request {
   cf?: Record<string, unknown> & {
@@ -308,6 +313,92 @@ export class AppWorker {
   private initialized = false;
   private startupStack = new LogStack();
 
+  private async collectHandlerMetrics(handler: AppHandler, env: WorkerEnv, request?: Request): Promise<MetricFamily[]> {
+    if (!handler.metrics) return [];
+    const metrics = getWorkerMetricsConfig(this.config, this.workerName);
+    const labels: Record<string, string> = {};
+    if (metrics.labels.source.enabled) {
+      labels[metrics.labels.source.app] = this.config.server.name;
+      labels[metrics.labels.source.worker] = this.workerName;
+      labels[metrics.labels.source.handler] = handler.name;
+    }
+    for (const [key, value] of Object.entries(metrics.labels.static)) if (value !== null) labels[key] = value;
+    const families = await handler.metrics.collect({ env, workerName: this.workerName, handlerName: handler.name, request });
+    return addMetricLabels(families, labels);
+  }
+
+  private getMetricsCache(env: WorkerEnv, coordinator = false): MetricsCacheStub | undefined {
+    const binding = env[coordinator ? 'BOBRA_METRICS_COORDINATOR' : 'BOBRA_METRICS_CACHE'] as MetricsCacheNamespace | undefined;
+    return binding?.getByName(`${this.config.server.name}:${this.workerName}`);
+  }
+
+  private getMetricsCoordinator(env: WorkerEnv): MetricsCoordinatorStub | undefined {
+    return this.getMetricsCache(env, true) as MetricsCoordinatorStub | undefined;
+  }
+
+  private async getObservabilityMetrics(handler: AppHandler, env: WorkerEnv, request: Request): Promise<MetricFamily[]> {
+    const policy = getWorkerMetricsConfig(this.config, this.workerName);
+    const localProviders = this.handlers.filter((candidate) => candidate.name !== 'observability' && candidate.metrics);
+    const localFamilies = localProviders.length > 0
+      ? await Promise.all(localProviders.map((provider) => this.getDirectMetrics(provider, env, request)))
+      : [];
+    const hasExternalProviders = Object.entries(this.config.workers).some(([name, worker]) => name !== this.workerName && getWorkerMetricsConfig(this.config, name).enabled && !worker.handlers.includes('observability'));
+    if (!hasExternalProviders) return mergeMetricFamilies(localFamilies);
+    if (!policy.cache.enabled) return mergeMetricFamilies([await handler.metrics!.collect({ env, workerName: this.workerName, handlerName: handler.name, request }), ...localFamilies]);
+    const coordinator = policy.cache.enabled ? this.getMetricsCoordinator(env) : undefined;
+    if (!coordinator) throw new Error('Observability metrics require the configured coordinator Durable Object');
+    const now = Date.now();
+    const snapshot = await coordinator.readMergedSnapshot();
+    if (snapshot && now - snapshot.collectedAt <= parseMetricsDuration(policy.cache.freshness)) return mergeMetricFamilies([snapshot.families, ...localFamilies]);
+    const refreshed = await coordinator.refresh();
+    await coordinator.scheduleNext(Date.now() + parseMetricsDuration(policy.cache.freshness));
+    return mergeMetricFamilies([refreshed.families, ...localFamilies]);
+  }
+
+  private async getDirectMetrics(handler: AppHandler, env: WorkerEnv, request: Request): Promise<MetricFamily[]> {
+    const policy = getWorkerMetricsConfig(this.config, this.workerName);
+    const cache = policy.cache.enabled ? this.getMetricsCache(env) ?? this.getMetricsCoordinator(env) : undefined;
+    const key = `handler:${handler.name}`;
+    const now = Date.now();
+    let stale: MetricsSnapshot | undefined;
+    if (cache) {
+      const stored = await cache.readSnapshot(key);
+      if (stored) {
+        if (now - stored.collectedAt <= parseMetricsDuration(policy.cache.freshness)) return stored.families;
+        stale = stored;
+      }
+    }
+    const holder = crypto.randomUUID();
+    if (cache && !await cache.acquireLease(key, holder, parseMetricsDuration(policy.cache.provider_timeout))) {
+      if (stale && now - stale.collectedAt <= parseMetricsDuration(policy.cache.max_staleness)) return stale.families;
+      throw new Error(`Metrics refresh already in progress for handler '${handler.name}'`);
+    }
+    try {
+      const families = await this.collectHandlerMetrics(handler, env, request);
+      if (cache) await cache.writeSnapshot(key, { collectedAt: now, families });
+      return families;
+    } finally {
+      if (cache) await cache.releaseLease(key, holder);
+    }
+  }
+
+  private async hasInternalMetricsAuth(request: Request, env: WorkerEnv): Promise<boolean> {
+    const binding = this.config.metrics?.internal_token_binding;
+    const expected = binding ? env[binding] : undefined;
+    const provided = request.headers.get('X-Internal-Token');
+    if (typeof expected !== 'string' || !provided) return false;
+    const encoder = new TextEncoder();
+    const [expectedHash, providedHash] = await Promise.all([
+      crypto.subtle.digest('SHA-256', encoder.encode(expected)),
+      crypto.subtle.digest('SHA-256', encoder.encode(provided)),
+    ]);
+    const left = new Uint8Array(expectedHash);
+    const right = new Uint8Array(providedHash);
+    let difference = 0;
+    for (let index = 0; index < left.length; index += 1) difference |= left[index]! ^ right[index]!;
+    return difference === 0;
+  }
+
   constructor(app: RoutableHono<HonoBindingsEnv>, config: AppConfig, workerName: string, basePath: string, options?: WorkerOptions) {
     this.app = app;
     this.config = config;
@@ -470,6 +561,10 @@ export class AppWorker {
       const module = await handlerModule;
       const handler = module.default;
 
+      if (handler.metrics && !getWorkerMetricsConfig(this.config, this.workerName).enabled) {
+        throw new Error(`Handler '${handler.name}' declares metrics but worker '${this.workerName}' has metrics disabled`);
+      }
+
       // Initialize handler's logger with worker's configuration
       const loggingConfig = getWorkerLoggingConfig(this.config, this.workerName);
 
@@ -497,6 +592,22 @@ export class AppWorker {
 
       if (handler.ignoreWorkerBasePath) {
         handlerPath = `/${handler.name}`;
+      }
+
+      const metricsConfig = getWorkerMetricsConfig(this.config, this.workerName);
+      if (metricsConfig.enabled && handler.metrics) {
+        const endpointPath = metricsConfig.endpoint_path.startsWith('/') ? metricsConfig.endpoint_path : `/${metricsConfig.endpoint_path}`;
+        this.app.get(`${handlerPath}${endpointPath}`, async (c) => {
+          try {
+            const families = handler.name === 'observability'
+              ? await this.getObservabilityMetrics(handler, c.env as WorkerEnv, c.req.raw)
+              : await this.getDirectMetrics(handler, c.env as WorkerEnv, c.req.raw);
+            return new Response(serializePrometheus(families), { headers: { 'Content-Type': 'text/plain; version=0.0.4; charset=utf-8', 'Cache-Control': 'no-store' } });
+          } catch (error) {
+            getLogger().error(`Metrics collection failed for handler ${handler.name}`, error instanceof Error ? error : new Error(String(error)));
+            return new Response('metrics collection failed\n', { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+          }
+        });
       }
 
       if (handler.name !== 'api-docs') {
@@ -619,6 +730,24 @@ export class AppWorker {
     }
   }
 
+  mountInternalMetricsCollector(): void {
+    const metrics = getWorkerMetricsConfig(this.config, this.workerName);
+    if (!metrics.enabled) return;
+    const internalPath = '/_bobra/metrics/collect';
+    this.app.post(internalPath, async (c) => {
+      try {
+        if (!await this.hasInternalMetricsAuth(c.req.raw, c.env as WorkerEnv)) return c.json({ error: 'forbidden' }, 403);
+        const requested: { handlers?: string[] } = await c.req.json<{ handlers?: string[] }>().catch(() => ({}));
+        const selected = this.handlers.filter((handler) => handler.metrics && (!requested.handlers || requested.handlers.includes(handler.name)));
+        const groups = await Promise.all(selected.map((handler) => this.collectHandlerMetrics(handler, c.env as WorkerEnv, c.req.raw)));
+        return c.json({ families: mergeMetricFamilies(groups) });
+      } catch (error) {
+        getLogger().error('Internal metrics collection failed', error instanceof Error ? error : new Error(String(error)));
+        return c.json({ error: 'metrics collection failed' }, 503);
+      }
+    });
+  }
+
   // Initialize all handlers
   async initialize(env: WorkerEnv): Promise<void> {
     if (this.initialized) {
@@ -626,6 +755,10 @@ export class AppWorker {
     }
 
     const workerLoggingConfig = getWorkerLoggingConfig(this.config, this.workerName);
+    const metricsConfig = getWorkerMetricsConfig(this.config, this.workerName);
+    if (metricsConfig.enabled && !this.handlers.some((handler) => handler.metrics)) {
+      throw new Error(`Metrics-enabled worker '${this.workerName}' has no metrics provider`);
+    }
     const verbosity = workerLoggingConfig.startupVerbosity || ['worker-registry', 'discovery-validation', 'handler-add', 'handler-init'];
 
     for (const handler of this.handlers) {
@@ -765,6 +898,8 @@ export function createCloudflareWorker(
         for (const handler of handlers) {
           await worker.add(handler);
         }
+
+        worker.mountInternalMetricsCollector();
 
         const workerExport = worker.export();
         return await workerExport.fetch(request, workerEnv, ctx);

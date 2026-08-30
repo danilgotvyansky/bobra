@@ -1,5 +1,6 @@
 import type { Hono } from 'hono';
 import type { LoggerConfig } from '../logging/logger';
+import type { MetricsProvider } from '../batteries/metrics';
 
 type HandlerEnv = Record<string, unknown>;
 type HonoEnv = { Bindings: HandlerEnv; Variables?: Record<string, unknown> };
@@ -30,6 +31,8 @@ export interface AppHandler {
   ignoreWorkerBasePath?: boolean;
   // Optional scheduled handler
   scheduled?: (event: ScheduledEvent, env: HandlerEnv, ctx: ExecutionCtx) => Promise<void> | void;
+  /** Optional, business-owned Prometheus metric collection. Operational policy belongs in config.yml. */
+  metrics?: MetricsProvider;
 }
 
 /**
