@@ -561,7 +561,7 @@ export class AppWorker {
       const module = await handlerModule;
       const handler = module.default;
 
-      if (handler.metrics && !getWorkerMetricsConfig(this.config, this.workerName).enabled) {
+      if (handler.metrics && this.config.metrics?.enabled && !getWorkerMetricsConfig(this.config, this.workerName).enabled) {
         throw new Error(`Handler '${handler.name}' declares metrics but worker '${this.workerName}' has metrics disabled`);
       }
 

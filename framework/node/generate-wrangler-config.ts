@@ -490,7 +490,7 @@ export function generateWranglerConfig<
       wranglerConfig.durable_objects ??= { bindings: [] };
       if (!wranglerConfig.durable_objects.bindings.some((item) => item.name === binding)) wranglerConfig.durable_objects.bindings.push({ name: binding, class_name: className });
       wranglerConfig.migrations ??= [];
-      const migration = wranglerConfig.migrations.find((item) => item.new_sqlite_classes !== undefined) || { tag: 'bobra-metrics-v1', new_sqlite_classes: [] };
+      const migration = wranglerConfig.migrations.find((item) => item.tag === 'bobra-metrics-v1') || { tag: 'bobra-metrics-v1', new_sqlite_classes: [] };
       if (!wranglerConfig.migrations.includes(migration)) wranglerConfig.migrations.push(migration);
       if (!migration.new_sqlite_classes!.includes(className)) migration.new_sqlite_classes!.push(className);
     }

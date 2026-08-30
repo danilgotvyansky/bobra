@@ -43,4 +43,20 @@ describe('metrics configuration', () => {
     const config = parseConfig(yaml.replace('  internal_token_binding: APP_INIT_TOKEN\n', ''));
     expect(() => validateConfig(config)).toThrow('metrics.internal_token_binding');
   });
+
+  it('requires collection authentication globally even if a worker declares its own binding', () => {
+    const config = parseConfig(yaml
+      .replace('  internal_token_binding: APP_INIT_TOKEN\n', '')
+      .replace('    metrics: { enabled: true }\n  metrics-worker:', '    metrics: { enabled: true, internal_token_binding: SOURCE_ONLY_TOKEN }\n  metrics-worker:'));
+    expect(getWorkerMetricsConfig(config, 'source-worker').internal_token_binding).toBeUndefined();
+    expect(() => validateConfig(config)).toThrow('metrics.internal_token_binding');
+  });
+
+  it('adds a dedicated metrics migration without changing an existing SQLite migration', () => {
+    const config = parseConfig(yaml);
+    config.workers['metrics-worker']!.durable_objects = [{ binding: 'APP_STATE', class_name: 'AppState' }];
+    const generated = generateWranglerConfig(config, 'worker', 'metrics-worker');
+    expect(generated.migrations).toContainEqual({ tag: 'durable-objects-v1', new_classes: ['AppState'] });
+    expect(generated.migrations).toContainEqual({ tag: 'bobra-metrics-v1', new_sqlite_classes: ['BobraMetricsCoordinator'] });
+  });
 });

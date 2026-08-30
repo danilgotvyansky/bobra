@@ -184,7 +184,7 @@ export interface WorkerConfig {
   cf_routes?: CloudflareRoute[];
   assets?: AssetsConfig;
   placement?: WorkerPlacementConfig;
-  metrics?: Partial<MetricsConfig>;
+  metrics?: WorkerMetricsConfig;
   observability?: {
     logs?: {
       enabled?: boolean;
@@ -268,6 +268,9 @@ export interface MetricsConfig {
   cache: MetricsCacheConfig;
   labels: MetricsLabelsConfig;
 }
+
+/** Worker policy can override collection behavior, but collection authentication is application-global. */
+export type WorkerMetricsConfig = Omit<Partial<MetricsConfig>, 'internal_token_binding'>;
 
 export const defaultMetricsConfig: MetricsConfig = {
   enabled: false,
@@ -373,6 +376,7 @@ export function getWorkerMetricsConfig(config: AppConfig, workerName: string): M
   // config. Start from defaults in both cases so partial global policy is safe.
   const globalMetrics = mergeMetricsConfig(defaultMetricsConfig, config.metrics);
   const effective = mergeMetricsConfig(globalMetrics, config.workers?.[workerName]?.metrics);
+  effective.internal_token_binding = globalMetrics.internal_token_binding;
   // Global enable is a master switch; a Worker opts in explicitly, matching logging's worker ownership.
   effective.enabled = Boolean(globalMetrics.enabled && config.workers?.[workerName]?.metrics?.enabled);
   return effective;
@@ -597,7 +601,7 @@ export function validateConfig(config: AppConfig): void {
   const allServiceIds = new Set<string>();
 
   const metricsWorkers = Object.entries(config.workers || {}).filter(([workerName]) => getWorkerMetricsConfig(config, workerName).enabled);
-  if (metricsWorkers.length > 0 && !getWorkerMetricsConfig(config, metricsWorkers[0]![0]).internal_token_binding) {
+  if (metricsWorkers.length > 0 && !config.metrics?.internal_token_binding) {
     throw new Error('Metrics-enabled workers require metrics.internal_token_binding for internal collection');
   }
 

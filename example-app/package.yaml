@@ -57,4 +57,4 @@ pnpm:
     "@valibot/to-json-schema": "1.7.1"
     "@hono/valibot-validator": "0.6.1"
     "@cloudflare/workers-types": "4.20260608.1"
-    "@danylohotvianskyi/bobra-framework": "file:../framework"
+    # "@danylohotvianskyi/bobra-framework": "file:../framework"
