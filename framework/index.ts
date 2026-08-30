@@ -20,3 +20,4 @@ export * from './middleware';
 export * from './batteries/auth';
 export * from './batteries/search';
 export * from './batteries/openapi';
+export * from './batteries/metrics';

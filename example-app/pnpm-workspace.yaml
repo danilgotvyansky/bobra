@@ -1,5 +1,5 @@
 catalog:
-  "@danylohotvianskyi/bobra-framework": "^0.5.1"
+  "@danylohotvianskyi/bobra-framework": "^0.6.1"
   "hono": "4.12.24"
   "@cloudflare/workers-types": "4.20260608.1"
   "@cloudflare/vitest-pool-workers": "0.16.13"

@@ -1,0 +1,2 @@
+# Copy this file to .dev.vars. Use the same value in every metrics-enabled Worker.
+EXAMPLE_METRICS_INTERNAL_TOKEN=replace-with-a-long-random-local-secret

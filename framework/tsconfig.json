@@ -27,6 +27,7 @@
     "**/*.test.ts"
   ],
   "types": [
-    "node"
+    "node",
+    "@cloudflare/workers-types"
   ]
 }

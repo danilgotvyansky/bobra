@@ -52,6 +52,7 @@ function redactOptions(options?: RequestInit): RequestInit | undefined {
       const h = new Headers(o.headers);
       if (h.has('Authorization')) h.set('Authorization', 'Bearer ***');
       if (h.has('X-Authorization')) h.set('X-Authorization', '***');
+      if (h.has('X-Internal-Token')) h.set('X-Internal-Token', '***');
       o.headers = Object.fromEntries(h.entries());
     }
     return o;

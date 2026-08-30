@@ -64,6 +64,19 @@ logging:
   colorize: true
   debugSink: "info"
 
+# One public endpoint on the observability Worker merges metrics from enabled
+# source Workers. Use a dedicated non-user-facing secret for internal collection.
+metrics:
+  enabled: true
+  endpoint_path: "/metrics"
+  internal_token_binding: "EXAMPLE_METRICS_INTERNAL_TOKEN"
+  cache:
+    enabled: true
+    backend: "durable-object"
+    freshness: "1m"
+    max_staleness: "5m"
+    provider_timeout: "10s"
+
 # Worker configurations
 workers:
   example-app-api-docs-worker:
@@ -132,6 +145,8 @@ workers:
     main: "src/index.ts"
     handlers:
       - "api-token"
+    metrics:
+      enabled: true
     database:
       postgres:
         binding: "POSTGRES"
@@ -142,6 +157,21 @@ workers:
         database_name: "example-app-db"
         database_id: "example-app-db"
         migrations_dir: "../../shared-utils/src/db/migrations-sqlite"
+    services:
+      - binding: "EXAMPLE_APP_ROUTER"
+        service: "example-app-router-worker"
+        external_url: "http://localhost:8700"
+
+  example-app-observability-worker:
+    name: "example-app-observability-worker"
+    port: 8784
+    inspector_port: 8224
+    description: "Central Prometheus metrics worker"
+    main: "src/index.ts"
+    handlers:
+      - "observability"
+    metrics:
+      enabled: true
     services:
       - binding: "EXAMPLE_APP_ROUTER"
         service: "example-app-router-worker"
@@ -180,6 +210,8 @@ router:
       service: "example-app-api-docs-worker"
     - path: "/api/api-token*"
       service: "example-app-api-token-worker"
+    - path: "/api/observability*"
+      service: "example-app-observability-worker"
 
     # Frontend Routes
     - path: "/dashboard*"

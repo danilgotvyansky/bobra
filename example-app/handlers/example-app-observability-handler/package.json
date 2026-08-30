@@ -1,0 +1,8 @@
+{
+  "name": "@example-app/observability-handler",
+  "version": "0.1.0",
+  "main": "src/index.ts",
+  "scripts": { "build": "tsc", "type-check": "tsc --noEmit" },
+  "dependencies": { "hono": "catalog:", "@danylohotvianskyi/bobra-framework": "catalog:" },
+  "devDependencies": { "@cloudflare/workers-types": "catalog:", "typescript": "catalog:" }
+}

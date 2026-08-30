@@ -1,6 +1,6 @@
 {
   "name": "@danylohotvianskyi/bobra-framework",
-  "version": "0.5.1",
+  "version": "0.6.1",
   "description": "Bobra Framework - Generic Cloudflare Workers Framework",
   "author": "Danylo Hotvianskyi",
   "license": "Apache-2.0",
@@ -59,6 +59,10 @@
     "./batteries/openapi": {
       "types": "./dist/batteries/openapi/index.d.ts",
       "default": "./dist/batteries/openapi/index.js"
+    },
+    "./batteries/metrics": {
+      "types": "./dist/batteries/metrics/index.d.ts",
+      "default": "./dist/batteries/metrics/index.js"
     }
   },
   "files": [
@@ -84,6 +88,7 @@
   },
   "dependencies": {
     "@cloudflare/workers-types": "4.20260608.1",
+    "@hono/standard-validator": "^0.2.0",
     "@hono/valibot-validator": "0.6.1",
     "@types/pg": "^8.11.2",
     "@valibot/to-json-schema": "1.7.1",
