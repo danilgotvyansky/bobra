@@ -4,12 +4,6 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-catalogs:
-  default:
-    '@danylohotvianskyi/bobra-framework':
-      specifier: ^0.5.1
-      version: 0.5.1
-
 overrides:
   esbuild: 0.28.0
   vite: 8.0.16
@@ -29,14 +23,15 @@ overrides:
   '@valibot/to-json-schema': 1.7.1
   '@hono/valibot-validator': 0.6.1
   '@cloudflare/workers-types': 4.20260608.1
+  '@danylohotvianskyi/bobra-framework': file:../framework
 
 importers:
 
   .:
     dependencies:
       '@danylohotvianskyi/bobra-framework':
-        specifier: 'catalog:'
-        version: 0.5.1(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@types/json-schema@7.0.15)(@types/node@25.9.2)(typescript@6.0.3)
+        specifier: file:../framework
+        version: file:../framework(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@types/node@25.9.2)(typescript@6.0.3)
       concurrently:
         specifier: ^9.2.0
         version: 9.2.1
@@ -66,8 +61,8 @@ importers:
   handlers/example-app-api-docs-handler:
     dependencies:
       '@danylohotvianskyi/bobra-framework':
-        specifier: 'catalog:'
-        version: 0.5.1(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@types/json-schema@7.0.15)(@types/node@25.9.2)(typescript@6.0.3)
+        specifier: file:../../../framework
+        version: file:../framework(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@types/node@25.9.2)(typescript@6.0.3)
       '@hono/swagger-ui':
         specifier: ^0.5.2
         version: 0.5.3(hono@4.12.24)
@@ -91,8 +86,8 @@ importers:
   handlers/example-app-api-token-handler:
     dependencies:
       '@danylohotvianskyi/bobra-framework':
-        specifier: 'catalog:'
-        version: 0.5.1(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@types/json-schema@7.0.15)(@types/node@25.9.2)(typescript@6.0.3)
+        specifier: file:../../../framework
+        version: file:../framework(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@types/node@25.9.2)(typescript@6.0.3)
       '@example-app/shared-utils':
         specifier: workspace:*
         version: link:../../shared-utils
@@ -113,7 +108,7 @@ importers:
         version: 4.12.24
       hono-openapi:
         specifier: 1.3.0
-        version: 1.3.0(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@types/json-schema@7.0.15)(hono@4.12.24)(openapi-types@12.1.3)
+        version: 1.3.0(@hono/standard-validator@0.2.3(@standard-schema/spec@1.1.0)(hono@4.12.24))(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@types/json-schema@7.0.15)(hono@4.12.24)(openapi-types@12.1.3)
       valibot:
         specifier: 1.4.1
         version: 1.4.1(typescript@6.0.3)
@@ -125,11 +120,27 @@ importers:
         specifier: 6.0.3
         version: 6.0.3
 
+  handlers/example-app-observability-handler:
+    dependencies:
+      '@danylohotvianskyi/bobra-framework':
+        specifier: file:../../../framework
+        version: file:../framework(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@types/node@25.9.2)(typescript@6.0.3)
+      hono:
+        specifier: 4.12.24
+        version: 4.12.24
+    devDependencies:
+      '@cloudflare/workers-types':
+        specifier: 4.20260608.1
+        version: 4.20260608.1
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+
   router/example-app-router-worker:
     dependencies:
       '@danylohotvianskyi/bobra-framework':
-        specifier: 'catalog:'
-        version: 0.5.1(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@types/json-schema@7.0.15)(@types/node@25.9.2)(typescript@6.0.3)
+        specifier: file:../../../framework
+        version: file:../framework(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@types/node@25.9.2)(typescript@6.0.3)
       hono:
         specifier: 4.12.24
         version: 4.12.24
@@ -153,8 +164,8 @@ importers:
         specifier: 4.20260608.1
         version: 4.20260608.1
       '@danylohotvianskyi/bobra-framework':
-        specifier: 'catalog:'
-        version: 0.5.1(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@types/json-schema@7.0.15)(@types/node@25.9.2)(typescript@6.0.3)
+        specifier: file:../../framework
+        version: file:../framework(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@types/node@25.9.2)(typescript@6.0.3)
       dotenv:
         specifier: ^16.4.1
         version: 16.6.1
@@ -193,8 +204,8 @@ importers:
   workers/example-app-api-docs-worker:
     dependencies:
       '@danylohotvianskyi/bobra-framework':
-        specifier: 'catalog:'
-        version: 0.5.1(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@types/json-schema@7.0.15)(@types/node@25.9.2)(typescript@6.0.3)
+        specifier: file:../../../framework
+        version: file:../framework(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@types/node@25.9.2)(typescript@6.0.3)
       '@example-app/api-docs-handler':
         specifier: workspace:*
         version: link:../../handlers/example-app-api-docs-handler
@@ -212,8 +223,8 @@ importers:
   workers/example-app-api-token-worker:
     dependencies:
       '@danylohotvianskyi/bobra-framework':
-        specifier: 'catalog:'
-        version: 0.5.1(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@types/json-schema@7.0.15)(@types/node@25.9.2)(typescript@6.0.3)
+        specifier: file:../../../framework
+        version: file:../framework(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@types/node@25.9.2)(typescript@6.0.3)
       '@example-app/api-token-handler':
         specifier: workspace:*
         version: link:../../handlers/example-app-api-token-handler
@@ -231,8 +242,24 @@ importers:
   workers/example-app-dashboard-worker:
     dependencies:
       '@danylohotvianskyi/bobra-framework':
-        specifier: 'catalog:'
-        version: 0.5.1(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@types/json-schema@7.0.15)(@types/node@25.9.2)(typescript@6.0.3)
+        specifier: file:../../../framework
+        version: file:../framework(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@types/node@25.9.2)(typescript@6.0.3)
+    devDependencies:
+      '@cloudflare/workers-types':
+        specifier: 4.20260608.1
+        version: 4.20260608.1
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+
+  workers/example-app-observability-worker:
+    dependencies:
+      '@danylohotvianskyi/bobra-framework':
+        specifier: file:../../../framework
+        version: file:../framework(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@types/node@25.9.2)(typescript@6.0.3)
+      '@example-app/observability-handler':
+        specifier: workspace:*
+        version: link:../../handlers/example-app-observability-handler
     devDependencies:
       '@cloudflare/workers-types':
         specifier: 4.20260608.1
@@ -310,8 +337,8 @@ packages:
     resolution: {integrity: sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw==}
     engines: {node: '>=12'}
 
-  '@danylohotvianskyi/bobra-framework@0.5.1':
-    resolution: {integrity: sha512-y0QJmRNFnQiUTVm3L69jsAWjQ3ukfHwDuE2Gj4Et+Ytea3nwC3Aluc1degVToR6gqplnfl1V1IB05e7niUy/wg==}
+  '@danylohotvianskyi/bobra-framework@file:../framework':
+    resolution: {directory: ../framework, type: directory}
     engines: {node: '>=24 <25'}
 
   '@drizzle-team/brocli@0.10.2':
@@ -519,6 +546,12 @@ packages:
     engines: {node: '>=10'}
     peerDependencies:
       vue: ^3.2.0
+
+  '@hono/standard-validator@0.2.3':
+    resolution: {integrity: sha512-bp9vHu6Va6SfMHC3D4ZLBbT/woi+AZ9CRdTXQu3kLJuLh2W/Gb9UO4hijS+BQAGFXi4EGpXdetxpzwTAawSVeg==}
+    peerDependencies:
+      '@standard-schema/spec': ^1.0.0
+      hono: 4.12.24
 
   '@hono/swagger-ui@0.5.3':
     resolution: {integrity: sha512-Hn90DOOJ62ICJQplQvCDVpi9Jcn6EhtRaiffyJIS53wA5RmRLtMCDQGVc0bor8vQD7JIwpkweWjs+3cycp+IvA==}
@@ -2332,9 +2365,10 @@ snapshots:
     dependencies:
       '@jridgewell/trace-mapping': 0.3.9
 
-  '@danylohotvianskyi/bobra-framework@0.5.1(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@types/json-schema@7.0.15)(@types/node@25.9.2)(typescript@6.0.3)':
+  '@danylohotvianskyi/bobra-framework@file:../framework(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@types/node@25.9.2)(typescript@6.0.3)':
     dependencies:
       '@cloudflare/workers-types': 4.20260608.1
+      '@hono/standard-validator': 0.2.3(@standard-schema/spec@1.1.0)(hono@4.12.24)
       '@hono/valibot-validator': 0.6.1(hono@4.12.24)(valibot@1.4.1(typescript@6.0.3))
       '@types/pg': 8.18.0
       '@valibot/to-json-schema': 1.7.1(valibot@1.4.1(typescript@6.0.3))
@@ -2342,7 +2376,7 @@ snapshots:
       drizzle-orm: 0.45.2(@cloudflare/workers-types@4.20260608.1)(@types/pg@8.18.0)(pg@8.20.0)(postgres@3.4.8)
       drizzle-valibot: 0.4.2(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260608.1)(@types/pg@8.18.0)(pg@8.20.0)(postgres@3.4.8))(valibot@1.4.1(typescript@6.0.3))
       hono: 4.12.24
-      hono-openapi: 1.3.0(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@types/json-schema@7.0.15)(hono@4.12.24)(openapi-types@12.1.3)
+      hono-openapi: 1.3.0(@hono/standard-validator@0.2.3(@standard-schema/spec@1.1.0)(hono@4.12.24))(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@types/json-schema@7.0.15)(hono@4.12.24)(openapi-types@12.1.3)
       js-yaml: 4.1.1
       openapi-types: 12.1.3
       pg: 8.20.0
@@ -2353,7 +2387,6 @@ snapshots:
     transitivePeerDependencies:
       - '@aws-sdk/client-rds-data'
       - '@electric-sql/pglite'
-      - '@hono/standard-validator'
       - '@libsql/client'
       - '@libsql/client-wasm'
       - '@neondatabase/serverless'
@@ -2363,6 +2396,7 @@ snapshots:
       - '@prisma/client'
       - '@standard-community/standard-json'
       - '@standard-community/standard-openapi'
+      - '@standard-schema/spec'
       - '@swc/core'
       - '@swc/wasm'
       - '@tidbcloud/serverless'
@@ -2527,6 +2561,11 @@ snapshots:
     dependencies:
       '@tanstack/vue-virtual': 3.13.21(vue@3.5.35(typescript@6.0.3))
       vue: 3.5.35(typescript@6.0.3)
+
+  '@hono/standard-validator@0.2.3(@standard-schema/spec@1.1.0)(hono@4.12.24)':
+    dependencies:
+      '@standard-schema/spec': 1.1.0
+      hono: 4.12.24
 
   '@hono/swagger-ui@0.5.3(hono@4.12.24)':
     dependencies:
@@ -3434,13 +3473,14 @@ snapshots:
 
   highlight.js@11.11.1: {}
 
-  hono-openapi@1.3.0(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@types/json-schema@7.0.15)(hono@4.12.24)(openapi-types@12.1.3):
+  hono-openapi@1.3.0(@hono/standard-validator@0.2.3(@standard-schema/spec@1.1.0)(hono@4.12.24))(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@types/json-schema@7.0.15)(hono@4.12.24)(openapi-types@12.1.3):
     dependencies:
       '@standard-community/standard-json': 0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3)
       '@standard-community/standard-openapi': 0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.1(valibot@1.4.1(typescript@6.0.3)))(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3)
       '@types/json-schema': 7.0.15
       openapi-types: 12.1.3
     optionalDependencies:
+      '@hono/standard-validator': 0.2.3(@standard-schema/spec@1.1.0)(hono@4.12.24)
       hono: 4.12.24
 
   hono@4.12.24: {}

@@ -188,7 +188,15 @@ const exampleAppApiTokenHandler: AppHandler = {
     initializeLogger(config, context, worker);
     if (handler) getLogger().setHandler(handler);
   },
-  init: async (_env) => { }
+  init: async (_env) => { },
+  metrics: {
+    collect: async () => [{
+      name: 'example_app_api_token_metrics_enabled',
+      help: 'Whether the example API token handler exposes Bobra metrics.',
+      type: 'gauge',
+      samples: [{ value: 1 }],
+    }],
+  }
 };
 
 export default exampleAppApiTokenHandler;

@@ -7,7 +7,7 @@ engines:
 scripts:
   dev: "pnpm run dev:generate-configs && concurrently \"pnpm --filter @example-app/dashboard run dev:build\" \"pnpm run dev:wrangler\" -n \"app,backend\""
   dev:nofrontends: "pnpm run dev:generate-configs && pnpm run dev:wrangler"
-  dev:wrangler: "pnpm exec wrangler -c router/example-app-router-worker/wrangler.jsonc -c workers/example-app-api-docs-worker/wrangler.jsonc -c workers/example-app-api-token-worker/wrangler.jsonc dev --local --persist-to=${LOCAL_WRANGLER_DIR}"
+  dev:wrangler: "pnpm exec wrangler -c router/example-app-router-worker/wrangler.jsonc -c workers/example-app-api-docs-worker/wrangler.jsonc -c workers/example-app-api-token-worker/wrangler.jsonc -c workers/example-app-observability-worker/wrangler.jsonc dev --local --persist-to=${LOCAL_WRANGLER_DIR}"
   dev:generate-configs: "bash scripts/generate-configs.sh local"
   build: "pnpm -r run build"
   install-all: "pnpm install"
@@ -57,4 +57,4 @@ pnpm:
     "@valibot/to-json-schema": "1.7.1"
     "@hono/valibot-validator": "0.6.1"
     "@cloudflare/workers-types": "4.20260608.1"
-    # "@danylohotvianskyi/bobra-framework": "file:../framework"
+    "@danylohotvianskyi/bobra-framework": "file:../framework"
