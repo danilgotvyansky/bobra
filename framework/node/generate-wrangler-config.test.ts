@@ -104,3 +104,53 @@ describe('generateWranglerConfig placement', () => {
     expect(hostnameConfig.placement).toEqual({ mode: 'targeted', hostname: 'api.example.com' });
   });
 });
+
+describe('generateWranglerConfig required secrets', () => {
+
+  it('omits secrets when none are configured', () => {
+    const generated = generateWranglerConfig(baseConfig(), 'worker', 'api-worker');
+
+    expect(generated.secrets).toBeUndefined();
+  });
+
+  it('adds global and worker secrets in declaration order without duplicates', () => {
+    const generated = generateWranglerConfig(
+      baseConfig({
+        secrets: { required: ['SHARED_SECRET', 'GLOBAL_SECRET'] },
+        workers: {
+          'api-worker': {
+            name: 'api-worker',
+            handlers: ['api'],
+            secrets: { required: ['WORKER_SECRET', 'SHARED_SECRET'] },
+          },
+        },
+      }),
+      'worker',
+      'api-worker'
+    );
+
+    expect(generated.secrets).toEqual({
+      required: ['SHARED_SECRET', 'GLOBAL_SECRET', 'WORKER_SECRET'],
+    });
+  });
+
+  it('uses router-scoped secrets for generated router configs', () => {
+    const generated = generateWranglerConfig(
+      baseConfig({
+        secrets: { required: ['SHARED_SECRET'] },
+        router: {
+          name: 'router-worker',
+          main: 'src/router.ts',
+          routes: [],
+          secrets: { required: ['ROUTER_SECRET'] },
+        },
+      }),
+      'router',
+      'router-worker'
+    );
+
+    expect(generated.secrets).toEqual({
+      required: ['SHARED_SECRET', 'ROUTER_SECRET'],
+    });
+  });
+});

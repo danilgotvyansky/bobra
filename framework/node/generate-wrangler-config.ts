@@ -52,6 +52,9 @@ export interface WranglerConfig {
     DB_ENGINE: string;
     [key: string]: string | number | boolean | JSONValue | undefined;
   };
+  secrets?: {
+    required: string[];
+  };
   migrations?: Array<{
     tag: string;
     new_classes?: string[];
@@ -196,6 +199,21 @@ function getPlacementConfig(
   }
 
   return config.workers?.[workerName]?.placement ?? config.placement;
+}
+
+function getRequiredSecrets(
+  config: AppConfig,
+  workerType: string,
+  workerName: string
+): string[] {
+  const scopedSecrets = workerType === 'router'
+    ? config.router?.secrets?.required
+    : config.workers?.[workerName]?.secrets?.required;
+
+  return Array.from(new Set([
+    ...(config.secrets?.required ?? []),
+    ...(scopedSecrets ?? []),
+  ]));
 }
 
 export function generateWranglerConfig<
@@ -524,6 +542,11 @@ export function generateWranglerConfig<
   const placement = getPlacementConfig(config, workerType, workerName);
   if (placement) {
     wranglerConfig.placement = placement;
+  }
+
+  const requiredSecrets = getRequiredSecrets(config, workerType, workerName);
+  if (requiredSecrets.length > 0) {
+    wranglerConfig.secrets = { required: requiredSecrets };
   }
 
   const baseWranglerConfig = wranglerConfig as TWranglerConfig;

@@ -42,6 +42,21 @@ vars:
   API_BASE_URL: "https://api.myapp.com"
 ```
 
+#### `secrets`
+Declare runtime secret names required during local development and deployment. Bobra never stores or generates values; provide them through Cloudflare secrets or the Worker's `.dev.vars` file.
+
+```yaml
+secrets:
+  required: ["DATABASE_PASSWORD"]
+
+workers:
+  api-worker:
+    secrets:
+      required: ["API_TOKEN"]
+```
+
+The global list applies to every Worker. Worker and router lists are added to it, with duplicates removed while preserving declaration order. The generator writes the effective list to Wrangler as `secrets.required`.
+
 #### `placement`
 Global Cloudflare Worker placement applied to the router and every worker unless overridden.
 
