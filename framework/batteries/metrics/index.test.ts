@@ -25,7 +25,7 @@ describe('metrics battery', () => {
   it('treats an empty successful provider response as valid but all failures as an error', async () => {
     const config = `server: { name: test, version: '1', description: test }\ncors: { origin: ['*'], allowMethods: ['GET'], allowHeaders: ['Content-Type'] }\nmetrics: { enabled: true, internal_token_binding: APP_TOKEN }\nworkers:\n  source: { name: source, handlers: [source], metrics: { enabled: true } }\n  metrics: { name: metrics, handlers: [observability], metrics: { enabled: true } }\nrouter: { name: router, routes: [] }`;
     const env = { CONFIG_CONTENT: config, APP_TOKEN: 'secret', SOURCE: { fetch: async () => new Response(JSON.stringify({ families: [] })) } };
-    await expect(collectObservabilityMetricGroups({ env, workerName: 'metrics', handlerName: 'observability' })).resolves.toEqual({ families: [], successfulProviders: 1 });
+    await expect(collectObservabilityMetricGroups({ env, workerName: 'metrics', handlerName: 'observability' })).resolves.toEqual({ families: [], successfulProviders: 1, expectedProviders: 1 });
     const failedEnv = { ...env, SOURCE: { fetch: async () => new Response('no', { status: 503 }) } };
     const state = createState();
     const coordinator = new BobraMetricsCoordinator(state as never, failedEnv);

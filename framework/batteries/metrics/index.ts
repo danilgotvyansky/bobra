@@ -143,16 +143,37 @@ export function createBobraMetricsCoordinatorClass<TBase extends MetricsDurableO
     const leaseTtl = policy?.provider_timeout ? parseMetricsDuration(policy.provider_timeout) : 15_000;
     if (!await this.acquireLease('merged', holder, leaseTtl)) {
       const existing = await this.readMergedSnapshot();
-      const maxStaleness = policy?.max_staleness ? parseMetricsDuration(policy.max_staleness) : 120_000;
-      if (existing && Date.now() - existing.collectedAt <= maxStaleness) return existing;
-      throw new Error('Metrics aggregation refresh already in progress');
+      // A concurrent scrape must never turn a valid snapshot into a 503. If
+      // one exists, keep serving it while the owner refreshes it. This avoids
+      // series disappearing from Prometheus during normal single-flight work.
+      if (existing) return existing;
+
+      // First scrape after startup: wait briefly for the owner to publish the
+      // initial complete snapshot, then return it. Do not fabricate metrics.
+      const waitMs = policy?.provider_timeout ? parseMetricsDuration(policy.provider_timeout) : 15_000;
+      const deadline = Date.now() + waitMs;
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        const snapshot = await this.readMergedSnapshot();
+        if (snapshot) return snapshot;
+      }
+      throw new Error('Metrics aggregation initial refresh timed out');
     }
     try {
       const result = await collectObservabilityMetricGroups({ env: this.env, workerName, handlerName: 'observability' });
       if (result.successfulProviders === 0) throw new Error('No metrics provider returned a successful response');
+      if (result.successfulProviders < result.expectedProviders) {
+        throw new Error(`Metrics collection incomplete: ${result.successfulProviders}/${result.expectedProviders} providers succeeded`);
+      }
       const snapshot = { collectedAt: Date.now(), families: result.families } satisfies MetricsSnapshot;
       await this.writeSnapshot('merged', snapshot);
       return snapshot;
+    } catch (error) {
+      // Keep the last complete snapshot available during transient provider
+      // failures. A scrape outage must not erase all Prometheus series.
+      const existing = await this.readMergedSnapshot();
+      if (existing) return existing;
+      throw error;
     } finally {
       await this.releaseLease('merged', holder);
     }
@@ -188,11 +209,12 @@ export function createObservabilityMetricsProvider(): MetricsProvider {
   };
 }
 
-export async function collectObservabilityMetricGroups(context: MetricsCollectionContext): Promise<{ families: MetricFamily[]; successfulProviders: number }> {
+export async function collectObservabilityMetricGroups(context: MetricsCollectionContext): Promise<{ families: MetricFamily[]; successfulProviders: number; expectedProviders: number }> {
       const config = await loadConfig(context.env);
       const groups: MetricFamily[][] = [];
       let successfulProviders = 0;
-      await Promise.all(Object.entries(config.workers).filter(([workerName, worker]) => workerName !== context.workerName && worker.metrics?.enabled).map(async ([workerName]) => {
+      const providers = Object.entries(config.workers).filter(([workerName, worker]) => workerName !== context.workerName && worker.metrics?.enabled);
+      await Promise.all(providers.map(async ([workerName]) => {
         const binding = context.env[serviceToBindingName(workerName)] as InternalServiceBinding | undefined;
         if (!binding) return;
         const token = config.metrics?.internal_token_binding ? context.env[config.metrics.internal_token_binding] : undefined;
@@ -205,5 +227,5 @@ export async function collectObservabilityMetricGroups(context: MetricsCollectio
         successfulProviders += 1;
         groups.push(payload.families);
       }));
-      return { families: mergeMetricFamilies(groups), successfulProviders };
+      return { families: mergeMetricFamilies(groups), successfulProviders, expectedProviders: providers.length };
 }
