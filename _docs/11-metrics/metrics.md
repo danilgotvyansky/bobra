@@ -29,9 +29,13 @@ workers:
   api-worker:
     handlers: [api]
     metrics: { enabled: true }
+    secrets:
+      required: ["APP_METRICS_INTERNAL_TOKEN"]
   observability-worker:
     handlers: [observability]
     metrics: { enabled: true }
+    secrets:
+      required: ["APP_METRICS_INTERNAL_TOKEN"]
 ```
 
 The central Worker entrypoint must export a coordinator:
@@ -50,7 +54,7 @@ export class BobraMetricsCoordinator extends createBobraMetricsCoordinatorClass(
 
 When caching is enabled, the config generator adds the Durable Object bindings and migration. See the [example](../../example-app/workers/example-app-observability-worker/src/index.ts).
 
-`APP_METRICS_INTERNAL_TOKEN` is the name of a runtime secret binding. Give it the same opaque value in every metrics-enabled Worker. It authenticates only Bobra's private collection protocol: do not reuse an API/user token and do not send it from Prometheus. Locally, copy each metrics-enabled Worker's `.dev.vars.example` to `.dev.vars` and set the shared value.
+`APP_METRICS_INTERNAL_TOKEN` is the name of a runtime secret binding. Declare it under `secrets.required` on every metrics-enabled Worker and give it the same opaque value in each Worker. Bobra validates the declaration during local development/deployment but never copies the value into generated config. It authenticates only Bobra's private collection protocol: do not reuse an API/user token and do not send it from Prometheus. Locally, copy each metrics-enabled Worker's `.dev.vars.example` to `.dev.vars` and set the shared value.
 
 ## Configuration reference
 

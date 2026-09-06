@@ -147,6 +147,9 @@ workers:
       - "api-token"
     metrics:
       enabled: true
+    secrets:
+      required:
+        - "EXAMPLE_METRICS_INTERNAL_TOKEN"
     database:
       postgres:
         binding: "POSTGRES"
@@ -172,6 +175,9 @@ workers:
       - "observability"
     metrics:
       enabled: true
+    secrets:
+      required:
+        - "EXAMPLE_METRICS_INTERNAL_TOKEN"
     services:
       - binding: "EXAMPLE_APP_ROUTER"
         service: "example-app-router-worker"

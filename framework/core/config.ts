@@ -64,6 +64,10 @@ export interface WorkerDurableObjectBinding {
   script_name?: string;
 }
 
+export interface RequiredSecretsConfig {
+  required: string[];
+}
+
 export interface WorkerDatabaseConfig {
   postgres?: HyperdrivePostgresConfig;
   d1?: D1Config;
@@ -181,6 +185,7 @@ export interface WorkerConfig {
     crons?: string[];
   };
   vars?: Record<string, string | number | boolean | JSONValue>;
+  secrets?: RequiredSecretsConfig;
   cf_routes?: CloudflareRoute[];
   assets?: AssetsConfig;
   placement?: WorkerPlacementConfig;
@@ -212,6 +217,7 @@ export interface RouterConfig {
   }>;
   kv_namespaces?: WorkerKvNamespaceConfig[];
   vars?: Record<string, string | number | boolean | JSONValue>;
+  secrets?: RequiredSecretsConfig;
   cf_routes?: CloudflareRoute[];
   assets?: AssetsConfig;
   placement?: WorkerPlacementConfig;
@@ -237,6 +243,7 @@ export interface AppConfig {
   logging?: LoggerConfig;
   pgEdge: PgEdgeConfig;
   vars?: Record<string, string | number | boolean | JSONValue>;
+  secrets?: RequiredSecretsConfig;
   placement?: WorkerPlacementConfig;
   metrics?: MetricsConfig;
   workers: Record<string, WorkerConfig>;
@@ -342,6 +349,7 @@ export function parseConfig(yamlContent: string, env?: Record<string, unknown>):
       logging: parsed.logging,
       metrics: mergeMetricsConfig(defaultMetricsConfig, parsed.metrics),
       vars: parsed.vars || {},
+      secrets: parsed.secrets,
       workers: parsed.workers || {},
       router: {
         ...defaultConfig.router,
