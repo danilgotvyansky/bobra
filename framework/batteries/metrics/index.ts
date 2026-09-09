@@ -142,7 +142,7 @@ export function createBobraMetricsCoordinatorClass<TBase extends MetricsDurableO
     const holder = crypto.randomUUID();
     const leaseTtl = policy?.provider_timeout ? parseMetricsDuration(policy.provider_timeout) : 15_000;
     if (!await this.acquireLease('merged', holder, leaseTtl)) {
-      const existing = await this.readMergedSnapshot();
+      const existing = await this.readMergedSnapshot().catch(() => undefined);
       // A concurrent scrape must never turn a valid snapshot into a 503. If
       // one exists, keep serving it while the owner refreshes it. This avoids
       // series disappearing from Prometheus during normal single-flight work.
@@ -154,7 +154,7 @@ export function createBobraMetricsCoordinatorClass<TBase extends MetricsDurableO
       const deadline = Date.now() + waitMs;
       while (Date.now() < deadline) {
         await new Promise((resolve) => setTimeout(resolve, 50));
-        const snapshot = await this.readMergedSnapshot();
+        const snapshot = await this.readMergedSnapshot().catch(() => undefined);
         if (snapshot) return snapshot;
       }
       throw new Error('Metrics aggregation initial refresh timed out');
@@ -171,7 +171,7 @@ export function createBobraMetricsCoordinatorClass<TBase extends MetricsDurableO
     } catch (error) {
       // Keep the last complete snapshot available during transient provider
       // failures. A scrape outage must not erase all Prometheus series.
-      const existing = await this.readMergedSnapshot();
+      const existing = await this.readMergedSnapshot().catch(() => undefined);
       if (existing) return existing;
       throw error;
     } finally {
