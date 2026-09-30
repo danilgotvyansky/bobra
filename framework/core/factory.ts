@@ -52,6 +52,20 @@ interface RequestWithCf extends Request {
   };
 }
 
+async function readCoordinatorSnapshotWithin<T>(read: Promise<T>, timeoutMs: number): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      read,
+      new Promise<T>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(`Metrics coordinator read exceeded ${timeoutMs}ms`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
+  }
+}
+
 function isJsonObject(node: JsonNode): node is { [key: string]: JsonNode } {
   return typeof node === 'object' && node !== null && !Array.isArray(node);
 }
@@ -106,7 +120,7 @@ function pruneComponents(
 
   const kept: SchemaMap = {};
 
-  // Traverse schema references transitively using a work queue to ensure 
+  // Traverse schema references transitively using a work queue to ensure
   // nested dependencies are not pruned.
   const toVisit: string[] = Array.from(refs);
   while (toVisit.length > 0) {
@@ -336,7 +350,7 @@ export class AppWorker {
     return this.getMetricsCache(env, true) as MetricsCoordinatorStub | undefined;
   }
 
-  private async getObservabilityMetrics(handler: AppHandler, env: WorkerEnv, request: Request): Promise<MetricFamily[]> {
+  private async getObservabilityMetrics(handler: AppHandler, env: WorkerEnv, request: Request, waitUntil?: (promise: Promise<unknown>) => void): Promise<MetricFamily[]> {
     const policy = getWorkerMetricsConfig(this.config, this.workerName);
     const localProviders = this.handlers.filter((candidate) => candidate.name !== 'observability' && candidate.metrics);
     const localFamilies = localProviders.length > 0
@@ -348,10 +362,37 @@ export class AppWorker {
     const coordinator = policy.cache.enabled ? this.getMetricsCoordinator(env) : undefined;
     if (!coordinator) throw new Error('Observability metrics require the configured coordinator Durable Object');
     const now = Date.now();
-    const snapshot = await coordinator.readMergedSnapshot();
+    let snapshot: MetricsSnapshot | undefined;
+    try {
+      // Prometheus scrape timeout can be shorter than the configured provider
+      // timeout. A queued Durable Object RPC must therefore fall back to a
+      // direct collection before it can make the entire Prometheus scrape
+      // disappear.
+      const readTimeoutMs = Math.min(parseMetricsDuration(policy.cache.provider_timeout), 5_000);
+      snapshot = await readCoordinatorSnapshotWithin(coordinator.readMergedSnapshot(), readTimeoutMs);
+    } catch {
+      // A storage reset or a queued coordinator RPC must not turn the public
+      // scrape into a 503 or let Prometheus time out. Re-collect this worker's
+      // providers; the next alarm will rebuild the merged snapshot.
+      return mergeMetricFamilies([await handler.metrics!.collect({ env, workerName: this.workerName, handlerName: handler.name, request }), ...localFamilies]);
+    }
     if (snapshot && now - snapshot.collectedAt <= parseMetricsDuration(policy.cache.freshness)) return mergeMetricFamilies([snapshot.families, ...localFamilies]);
-    const refreshed = await coordinator.refresh();
-    await coordinator.scheduleNext(Date.now() + parseMetricsDuration(policy.cache.freshness));
+    if (snapshot && now - snapshot.collectedAt <= parseMetricsDuration(policy.cache.max_staleness)) {
+      // Constant scrapes must not wait on provider collection. Keep serving the
+      // last complete snapshot and refresh in the Worker background.
+      const refresh = coordinator.refresh()
+        .then(() => coordinator.scheduleNext(Date.now() + parseMetricsDuration(policy.cache.freshness)))
+        .catch(() => undefined);
+      if (waitUntil) waitUntil(refresh);
+      return mergeMetricFamilies([snapshot.families, ...localFamilies]);
+    }
+    let refreshed: MetricsSnapshot;
+    try {
+      refreshed = await coordinator.refresh();
+      await coordinator.scheduleNext(Date.now() + parseMetricsDuration(policy.cache.freshness));
+    } catch {
+      return mergeMetricFamilies([await handler.metrics!.collect({ env, workerName: this.workerName, handlerName: handler.name, request }), ...localFamilies]);
+    }
     return mergeMetricFamilies([refreshed.families, ...localFamilies]);
   }
 
@@ -600,7 +641,7 @@ export class AppWorker {
         this.app.get(`${handlerPath}${endpointPath}`, async (c) => {
           try {
             const families = handler.name === 'observability'
-              ? await this.getObservabilityMetrics(handler, c.env as WorkerEnv, c.req.raw)
+              ? await this.getObservabilityMetrics(handler, c.env as WorkerEnv, c.req.raw, c.executionCtx?.waitUntil?.bind(c.executionCtx))
               : await this.getDirectMetrics(handler, c.env as WorkerEnv, c.req.raw);
             return new Response(serializePrometheus(families), { headers: { 'Content-Type': 'text/plain; version=0.0.4; charset=utf-8', 'Cache-Control': 'no-store' } });
           } catch (error) {
