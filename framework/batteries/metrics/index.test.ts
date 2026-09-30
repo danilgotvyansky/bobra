@@ -32,22 +32,48 @@ describe('metrics battery', () => {
     await expect(coordinator.refresh()).rejects.toThrow('No metrics provider returned a successful response');
   });
 
-  it('returns a valid stale merged snapshot when another refresh owns the coordinator lease', async () => {
+  it('shares a concurrent coordinator refresh without Durable Object lease storage', async () => {
     const state = createState();
-    await state.storage.put('snapshot:merged', { collectedAt: Date.now(), families: [] });
-    await state.storage.put('lease:merged', { holder: 'other', expiresAt: Date.now() + 10_000 });
-    const config = `server: { name: test, version: '1', description: test }\ncors: { origin: ['*'], allowMethods: ['GET'], allowHeaders: ['Content-Type'] }\nmetrics: { enabled: true }\nworkers:\n  metrics: { name: metrics, handlers: [observability], metrics: { enabled: true } }\nrouter: { name: router, routes: [] }`;
-    const coordinator = new BobraMetricsCoordinator(state as never, { CONFIG_CONTENT: config });
-    await expect(coordinator.refresh()).resolves.toEqual({ collectedAt: expect.any(Number), families: [] });
+    let requests = 0;
+    let resolveRequest: (() => void) | undefined;
+    const config = `server: { name: test, version: '1', description: test }\ncors: { origin: ['*'], allowMethods: ['GET'], allowHeaders: ['Content-Type'] }\nmetrics: { enabled: true }\nworkers:\n  source: { name: source, handlers: [source], metrics: { enabled: true } }\n  metrics: { name: metrics, handlers: [observability], metrics: { enabled: true } }\nrouter: { name: router, routes: [] }`;
+    const coordinator = new BobraMetricsCoordinator(state as never, {
+      CONFIG_CONTENT: config,
+      SOURCE: { fetch: async () => {
+        requests += 1;
+        await new Promise<void>((resolve) => { resolveRequest = resolve; });
+        return new Response(JSON.stringify({ families: [] }));
+      } },
+    });
+    const first = coordinator.refresh();
+    const second = coordinator.refresh();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(requests).toBe(1);
+    resolveRequest?.();
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      { collectedAt: expect.any(Number), families: [] },
+      { collectedAt: expect.any(Number), families: [] },
+    ]);
+    expect(state.operations.some((operation) => operation.startsWith('put:lease:'))).toBe(false);
+  });
+
+  it('keeps a loaded snapshot in memory and avoids repeated Durable Object reads', async () => {
+    const state = createState();
+    await state.storage.put('snapshot:merged', { collectedAt: 1, families: [] });
+    const coordinator = new BobraMetricsCoordinator(state as never, {});
+    await coordinator.readMergedSnapshot();
+    await coordinator.readMergedSnapshot();
+    expect(state.operations.filter((operation) => operation === 'get:snapshot:merged')).toHaveLength(1);
   });
 });
 
 function createState() {
   const values = new Map<string, unknown>();
-  return { storage: {
-    get: async <T>(key: string) => values.get(key) as T | undefined,
-    put: async <T>(key: string, value: T) => { values.set(key, value); },
-    delete: async (key: string) => values.delete(key),
-    setAlarm: async () => undefined,
+  const operations: string[] = [];
+  return { operations, storage: {
+    get: async <T>(key: string) => { operations.push(`get:${key}`); return values.get(key) as T | undefined; },
+    put: async <T>(key: string, value: T) => { operations.push(`put:${key}`); values.set(key, value); },
+    delete: async (key: string) => { operations.push(`delete:${key}`); return values.delete(key); },
+    setAlarm: async () => { operations.push('setAlarm'); },
   } };
 }

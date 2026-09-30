@@ -52,6 +52,20 @@ interface RequestWithCf extends Request {
   };
 }
 
+async function readCoordinatorSnapshotWithin<T>(read: Promise<T>, timeoutMs: number): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      read,
+      new Promise<T>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(`Metrics coordinator read exceeded ${timeoutMs}ms`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
+  }
+}
+
 function isJsonObject(node: JsonNode): node is { [key: string]: JsonNode } {
   return typeof node === 'object' && node !== null && !Array.isArray(node);
 }
@@ -106,7 +120,7 @@ function pruneComponents(
 
   const kept: SchemaMap = {};
 
-  // Traverse schema references transitively using a work queue to ensure 
+  // Traverse schema references transitively using a work queue to ensure
   // nested dependencies are not pruned.
   const toVisit: string[] = Array.from(refs);
   while (toVisit.length > 0) {
@@ -350,11 +364,16 @@ export class AppWorker {
     const now = Date.now();
     let snapshot: MetricsSnapshot | undefined;
     try {
-      snapshot = await coordinator.readMergedSnapshot();
+      // Prometheus scrape timeout can be shorter than the configured provider
+      // timeout. A queued Durable Object RPC must therefore fall back to a
+      // direct collection before it can make the entire Prometheus scrape
+      // disappear.
+      const readTimeoutMs = Math.min(parseMetricsDuration(policy.cache.provider_timeout), 5_000);
+      snapshot = await readCoordinatorSnapshotWithin(coordinator.readMergedSnapshot(), readTimeoutMs);
     } catch {
-      // A Durable Object storage reset must not turn the public scrape into a
-      // 503. Re-collect this worker's providers; the next alarm will rebuild
-      // the merged snapshot once storage is healthy again.
+      // A storage reset or a queued coordinator RPC must not turn the public
+      // scrape into a 503 or let Prometheus time out. Re-collect this worker's
+      // providers; the next alarm will rebuild the merged snapshot.
       return mergeMetricFamilies([await handler.metrics!.collect({ env, workerName: this.workerName, handlerName: handler.name, request }), ...localFamilies]);
     }
     if (snapshot && now - snapshot.collectedAt <= parseMetricsDuration(policy.cache.freshness)) return mergeMetricFamilies([snapshot.families, ...localFamilies]);

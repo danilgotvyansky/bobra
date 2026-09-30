@@ -107,12 +107,42 @@ class MetricsDurableObjectBase {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type MetricsDurableObjectConstructor = new (...args: any[]) => MetricsDurableObjectBase;
 
+type SnapshotCache = { snapshots: Map<string, MetricsSnapshot | undefined>; loadedKeys: Set<string> };
+const snapshotCaches = new WeakMap<object, SnapshotCache>();
+const coordinatorRefreshes = new WeakMap<object, Promise<MetricsSnapshot>>();
+
+function snapshotCache(instance: object): SnapshotCache {
+  let cache = snapshotCaches.get(instance);
+  if (!cache) {
+    cache = { snapshots: new Map(), loadedKeys: new Set() };
+    snapshotCaches.set(instance, cache);
+  }
+  return cache;
+}
+
 /** Creates a cache class using the runtime DurableObject base supplied by the Worker entrypoint. */
 export function createBobraMetricsCacheClass<TBase extends MetricsDurableObjectConstructor>(DurableObjectBase: TBase) {
 return class BobraMetricsCache extends DurableObjectBase {
-  async readSnapshot(key: string): Promise<MetricsSnapshot | undefined> { return this.ctx.storage.get<MetricsSnapshot>(`snapshot:${key}`); }
-  async writeSnapshot(key: string, snapshot: MetricsSnapshot): Promise<void> { await this.ctx.storage.put(`snapshot:${key}`, snapshot); }
-  async deleteSnapshot(key: string): Promise<void> { await this.ctx.storage.delete(`snapshot:${key}`); }
+  async readSnapshot(key: string): Promise<MetricsSnapshot | undefined> {
+    const cache = snapshotCache(this);
+    if (cache.loadedKeys.has(key)) return cache.snapshots.get(key);
+    const snapshot = await this.ctx.storage.get<MetricsSnapshot>(`snapshot:${key}`);
+    cache.loadedKeys.add(key);
+    cache.snapshots.set(key, snapshot);
+    return snapshot;
+  }
+  async writeSnapshot(key: string, snapshot: MetricsSnapshot): Promise<void> {
+    await this.ctx.storage.put(`snapshot:${key}`, snapshot);
+    const cache = snapshotCache(this);
+    cache.loadedKeys.add(key);
+    cache.snapshots.set(key, snapshot);
+  }
+  async deleteSnapshot(key: string): Promise<void> {
+    await this.ctx.storage.delete(`snapshot:${key}`);
+    const cache = snapshotCache(this);
+    cache.loadedKeys.add(key);
+    cache.snapshots.delete(key);
+  }
   async acquireLease(key: string, holder: string, ttlMs: number): Promise<boolean> {
     const leaseKey = `lease:${key}`;
     const current = await this.ctx.storage.get<MetricsLease>(leaseKey);
@@ -133,49 +163,17 @@ return class BobraMetricsCache extends DurableObjectBase {
 export function createBobraMetricsCoordinatorClass<TBase extends MetricsDurableObjectConstructor>(DurableObjectBase: TBase) {
 	const BobraMetricsCache = createBobraMetricsCacheClass(DurableObjectBase);
 	return class BobraMetricsCoordinator extends BobraMetricsCache {
-  async scheduleNext(at: number): Promise<void> { await this.ctx.storage.put('next_alarm_at', at); await this.ctx.storage.setAlarm(at); }
+  async scheduleNext(at: number): Promise<void> { await this.ctx.storage.setAlarm(at); }
   async readMergedSnapshot(): Promise<MetricsSnapshot | undefined> { return this.readSnapshot('merged'); }
   async refresh(): Promise<MetricsSnapshot> {
-    const config = await loadConfig(this.env);
-    const workerName = Object.entries(config.workers).find(([, worker]) => worker.handlers.includes('observability'))?.[0] || String(this.env.WORKER_NAME || 'observability');
-    const policy = config.workers[workerName] ? getWorkerMetricsConfig(config, workerName).cache : undefined;
-    const holder = crypto.randomUUID();
-    const leaseTtl = policy?.provider_timeout ? parseMetricsDuration(policy.provider_timeout) : 15_000;
-    if (!await this.acquireLease('merged', holder, leaseTtl)) {
-      const existing = await this.readMergedSnapshot().catch(() => undefined);
-      // A concurrent scrape must never turn a valid snapshot into a 503. If
-      // one exists, keep serving it while the owner refreshes it. This avoids
-      // series disappearing from Prometheus during normal single-flight work.
-      if (existing) return existing;
-
-      // First scrape after startup: wait briefly for the owner to publish the
-      // initial complete snapshot, then return it. Do not fabricate metrics.
-      const waitMs = policy?.provider_timeout ? parseMetricsDuration(policy.provider_timeout) : 15_000;
-      const deadline = Date.now() + waitMs;
-      while (Date.now() < deadline) {
-        await new Promise((resolve) => setTimeout(resolve, 50));
-        const snapshot = await this.readMergedSnapshot().catch(() => undefined);
-        if (snapshot) return snapshot;
-      }
-      throw new Error('Metrics aggregation initial refresh timed out');
-    }
+    const inFlight = coordinatorRefreshes.get(this);
+    if (inFlight) return inFlight;
+    const refresh = refreshMergedSnapshot(this);
+    coordinatorRefreshes.set(this, refresh);
     try {
-      const result = await collectObservabilityMetricGroups({ env: this.env, workerName, handlerName: 'observability' });
-      if (result.successfulProviders === 0) throw new Error('No metrics provider returned a successful response');
-      if (result.successfulProviders < result.expectedProviders) {
-        throw new Error(`Metrics collection incomplete: ${result.successfulProviders}/${result.expectedProviders} providers succeeded`);
-      }
-      const snapshot = { collectedAt: Date.now(), families: result.families } satisfies MetricsSnapshot;
-      await this.writeSnapshot('merged', snapshot);
-      return snapshot;
-    } catch (error) {
-      // Keep the last complete snapshot available during transient provider
-      // failures. A scrape outage must not erase all Prometheus series.
-      const existing = await this.readMergedSnapshot().catch(() => undefined);
-      if (existing) return existing;
-      throw error;
+      return await refresh;
     } finally {
-      await this.releaseLease('merged', holder);
+      if (coordinatorRefreshes.get(this) === refresh) coordinatorRefreshes.delete(this);
     }
   }
   async alarm(): Promise<void> {
@@ -189,6 +187,31 @@ export function createBobraMetricsCoordinatorClass<TBase extends MetricsDurableO
     }
   }
 	};
+}
+
+async function refreshMergedSnapshot(coordinator: {
+  env: MetricsDurableEnv;
+  readMergedSnapshot(): Promise<MetricsSnapshot | undefined>;
+  writeSnapshot(key: string, snapshot: MetricsSnapshot): Promise<void>;
+}): Promise<MetricsSnapshot> {
+  const config = await loadConfig(coordinator.env);
+  const workerName = Object.entries(config.workers).find(([, worker]) => worker.handlers.includes('observability'))?.[0] || String(coordinator.env.WORKER_NAME || 'observability');
+  try {
+    const result = await collectObservabilityMetricGroups({ env: coordinator.env, workerName, handlerName: 'observability' });
+    if (result.successfulProviders === 0) throw new Error('No metrics provider returned a successful response');
+    if (result.successfulProviders < result.expectedProviders) {
+      throw new Error(`Metrics collection incomplete: ${result.successfulProviders}/${result.expectedProviders} providers succeeded`);
+    }
+    const snapshot = { collectedAt: Date.now(), families: result.families } satisfies MetricsSnapshot;
+    await coordinator.writeSnapshot('merged', snapshot);
+    return snapshot;
+  } catch (error) {
+    // Keep the last complete snapshot available during transient provider
+    // failures. A scrape outage must not erase all Prometheus series.
+    const existing = await coordinator.readMergedSnapshot().catch(() => undefined);
+    if (existing) return existing;
+    throw error;
+  }
 }
 
 // Node-safe classes for configuration/tests. Worker entrypoints must create
